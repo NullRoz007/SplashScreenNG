@@ -56,6 +56,6 @@ The `windowStyle` key accepts a preset name. You can also override the raw Win32
 
 | Preset | Value | Description | Win32 Style
 |--------|-------|-------------|--------------|
-| `forced` | `134217736` | Topmost, no taskbar icon _(default)_ | `WS_EX_TOPMOST | WS_EX_NOACTIVATE` | 
+| `forced` | `134217736` | Topmost, no taskbar icon _(default)_ | `WS_EX_TOPMOST \| WS_EX_NOACTIVATE` | 
 | `forcedicon` | `524296` | Topmost with taskbar icon | `WS_EX_TOPMOST` |
 | `normal` | `0` | Standard window | None |
