@@ -1,0 +1,45 @@
+{
+  "splash": "splash_trans.png",
+  "spinner": "loading.gif",
+
+  "width": 835,
+  "height": 400,
+  "forceFocus": true,
+  "closeOn": 8,
+  "draggable": true,
+  "windowStyle": "forcedicon",
+
+  "opacity": 1,
+  "fadeIn": true,
+  "fadeOut": true,
+  "fadeStep": 0.02,
+
+  "useSpinner": true,
+  "spinnerX": 780,
+  "spinnerY": 350,
+  "spinnerWidth": 32,
+  "spinnerHeight": 32,
+
+  "useText": true,
+  "textFont": "Segoe UI Semibold",
+  "textFontSize": 12,
+  "textPadding": 0,
+  "textColorR": 255,
+  "textColorG": 255,
+  "textColorB": 255,
+  "textX": 0,
+  "textY": 320,
+  "textAlignment": "center",
+
+  "windowStyles": {
+    "forced": 134217736,
+    "forcedicon": 8,
+    "normal": 0
+  },
+
+  "textAlignments": {
+    "center": 2,
+    "left": 0,
+    "right": 1
+  }
+}

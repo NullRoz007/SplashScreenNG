@@ -27,9 +27,15 @@ namespace SplashNG {
 
     int Splash::height;
     int Splash::width;
+    bool Splash::draggable;
     bool Splash::_isClosing;
     wstring Splash::splashFile;
     wstring Splash::spinnerFile;
+
+    int Splash::textX;
+    int Splash::textY;
+    DWRITE_TEXT_ALIGNMENT Splash::textAlign;
+    DWRITE_PARAGRAPH_ALIGNMENT Splash::paraAlign;
 
     wstring Splash::font;
     int Splash::fontSize;
@@ -51,10 +57,39 @@ namespace SplashNG {
 
     bool Splash::useText;
     bool Splash::useSpinner;
+    int Splash::framesElapsed = 0;
 
-    bool Splash::draggable;
+    struct SplashTextAlignment {
+        DWRITE_TEXT_ALIGNMENT textAlignment;
+        DWRITE_PARAGRAPH_ALIGNMENT paraAlignment;
+    };
 
-    int frames = 0;
+    SplashTextAlignment getTextAlignment() {
+        SplashTextAlignment result = {};
+
+        string textAlignName = Config::get<string>("textAlignment", "center");
+        result.textAlignment = DWRITE_TEXT_ALIGNMENT_CENTER;
+        result.paraAlignment = DWRITE_PARAGRAPH_ALIGNMENT_CENTER;
+
+        try {
+            result.textAlignment = static_cast<DWRITE_TEXT_ALIGNMENT>(Config::getFrom<int>("textAlignments", textAlignName, 2));
+            switch (result.textAlignment) {
+                case DWRITE_TEXT_ALIGNMENT_LEADING:
+                    result.paraAlignment = DWRITE_PARAGRAPH_ALIGNMENT_NEAR;
+                    break;
+                case DWRITE_TEXT_ALIGNMENT_CENTER:
+                    result.paraAlignment = DWRITE_PARAGRAPH_ALIGNMENT_NEAR;
+                    break;
+                case DWRITE_TEXT_ALIGNMENT_TRAILING:
+                    result.paraAlignment = DWRITE_PARAGRAPH_ALIGNMENT_FAR;
+                    break;
+            }
+        } catch (exception& ex) {
+            log::error("Invalid value passed to textAlign {}", ex.what());
+        }
+
+        return result;
+    }
 
     LRESULT CALLBACK Splash::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
         switch (uMsg) {
@@ -162,8 +197,8 @@ namespace SplashNG {
         }
 
         if (SUCCEEDED(hr)) {
-            pIDWriteTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-            pIDWriteTextFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+            pIDWriteTextFormat->SetTextAlignment(textAlign); 
+            pIDWriteTextFormat->SetParagraphAlignment(paraAlign);
             pIDWriteTextFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
         }
 
@@ -256,10 +291,10 @@ namespace SplashNG {
         );
         
         D2D1_RECT_F textRect = D2D1::RectF(
-            0, 
-            sz.height - pIDWriteTextFormat->GetFontSize() - fontPadding, 
-            sz.width, 
-            sz.height - fontPadding
+            textX + fontPadding, 
+            textY + fontPadding, 
+            sz.width - fontPadding, 
+            sz.height - pIDWriteTextFormat->GetFontSize() - fontPadding
         );
 
         pRenderTarget->BeginDraw();
@@ -275,7 +310,7 @@ namespace SplashNG {
         }
 
         if (useSpinner && pSpinnerFrames) {
-            pRenderTarget->DrawBitmap(pSpinnerFrames->at(frames % pSpinnerFrames->size()).Get(), 
+            pRenderTarget->DrawBitmap(pSpinnerFrames->at(framesElapsed % pSpinnerFrames->size()).Get(), 
                 spRect, 
                 currentOpacity,
                 D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
@@ -354,6 +389,13 @@ namespace SplashNG {
         useSpinner = Config::get<bool>("useSpinner", false);
         useText = Config::get<bool>("useText", false);
         draggable = Config::get<bool>("draggable", true);
+
+        textX = Config::get<int>("textX", 0);
+        textY = Config::get<int>("textY", 0);
+
+        SplashTextAlignment splashTextAlign = getTextAlignment();
+        textAlign = splashTextAlign.textAlignment;
+        paraAlign = splashTextAlign.paraAlignment;
 
         wstring splash = Config::get<wstring>("splash", FALLBACK_SPLASH);
         wstring spinner = Config::get<wstring>("spinner", FALLBACK_SPINNER);
@@ -457,7 +499,7 @@ namespace SplashNG {
 
             if (pRenderTarget) RenderFrame();
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            frames += 1;
+            framesElapsed += 1;
         }
     }
 

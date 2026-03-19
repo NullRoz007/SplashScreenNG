@@ -50,6 +50,12 @@ namespace SplashNG {
         static bool _isClosing;
 
         static bool useText;
+        static int textX;
+        static int textY;
+
+        static DWRITE_TEXT_ALIGNMENT textAlign;
+        static DWRITE_PARAGRAPH_ALIGNMENT paraAlign;
+
         static wstring font;
         static int fontSize;
         static int fontColorR;
@@ -68,7 +74,7 @@ namespace SplashNG {
         static int spinnerHeight;
         static int spinnerX;
         static int spinnerY;
-
+        static int framesElapsed;
         static bool draggable;
 
         static ComPtr<ID2D1Factory> pD2DFactory;

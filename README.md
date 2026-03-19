@@ -40,10 +40,13 @@ Place `config.json` in `Data/SKSE/Plugins/SplashScreenNG/`. All fields are optio
 | `useText` | bool | `true` | Show loading log text at the bottom of the splash |
 | `textFont` | string | `"Segoe UI Semibold"` | Font family name |
 | `textFontSize` | float | `12` | Font size in points |
-| `textPadding` | int | `80` | Bottom padding for the text in pixels |
+| `textPadding` | int | `80` | Padding for the text in pixels |
 | `textColorR` | int | `255` | Text color red channel (`0`–`255`) |
 | `textColorG` | int | `255` | Text color green channel (`0`–`255`) |
 | `textColorB` | int | `255` | Text color blue channel (`0`–`255`) |
+| `textX` | int | 0 | Text X position |
+| `textY` | int | 0 | Text Y position |
+| `textAlignment` | string | `"center"` | Text alignment preset — see [Text Alignment](#text-alignment) | 
 
 ### Behaviour
 | Key | Type | Default | Description |
@@ -52,10 +55,20 @@ Place `config.json` in `Data/SKSE/Plugins/SplashScreenNG/`. All fields are optio
 | `closeOn` | int | `8` | SKSE load stage at which the splash closes. 6 = kInputLoaded, 8 = kDataLoaded |
 
 ### Window Styles
-The `windowStyle` key accepts a preset name. You can also override the raw Win32 style values directly under `windowStyles`.
+The `windowStyle` key accepts a preset name. You can override the raw Win32 style values directly under `windowStyles`.
 
-| Preset | Value | Description | Win32 Style
-|--------|-------|-------------|--------------|
+| Preset | Value | Description | Win32 Style |
+|--------|-------|-------------|-------------|
 | `forced` | `134217736` | Topmost, no taskbar icon _(default)_ | `WS_EX_TOPMOST \| WS_EX_NOACTIVATE` | 
 | `forcedicon` | `524296` | Topmost with taskbar icon | `WS_EX_TOPMOST` |
 | `normal` | `0` | Standard window | None |
+
+### Text Alignment
+The `textAlignment` key accepts a preset name. You can override the raw DWRITE text align style directly under `textAlignments`, however paragraph alignment is selected automatically.
+Invalid values force central paragraph and text alignment.
+
+| Preset | Value | Paragraph Alignment | DWRITE Text Align |
+|--------|-------|---------------------|-------------------|
+| `left` | `0` | Near | `LEADING` |
+| `center` | `2` | Center | `CENTER` |
+| `right` | `1` | Far | `TRAILING` |
