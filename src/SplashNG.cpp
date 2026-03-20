@@ -2,6 +2,7 @@
 #include <SplashNG.h>
 #include <SplashBitmap.h>
 #include <Config.h>
+#include <Util.hpp>
 
 using namespace SKSE;
 
@@ -34,15 +35,17 @@ namespace SplashNG {
 
     int Splash::textX;
     int Splash::textY;
+    
+    wstring Splash::font;
+    int Splash::textSize;
+    int Splash::textColorR;
+    int Splash::textColorG;
+    int Splash::textColorB;
+    float Splash::textPadding;
+    DWRITE_FONT_WEIGHT Splash::textWeight;
+    DWRITE_FONT_STYLE Splash::textStyle;
     DWRITE_TEXT_ALIGNMENT Splash::textAlign;
     DWRITE_PARAGRAPH_ALIGNMENT Splash::paraAlign;
-
-    wstring Splash::font;
-    int Splash::fontSize;
-    int Splash::fontColorR;
-    int Splash::fontColorG;
-    int Splash::fontColorB;
-    float Splash::fontPadding;
 
     float Splash::currentOpacity;
     float Splash::targetOpacity;
@@ -59,72 +62,34 @@ namespace SplashNG {
     bool Splash::useSpinner;
     int Splash::framesElapsed = 0;
 
-    struct SplashTextAlignment {
-        DWRITE_TEXT_ALIGNMENT textAlignment;
-        DWRITE_PARAGRAPH_ALIGNMENT paraAlignment;
-    };
-
-    SplashTextAlignment getTextAlignment() {
-        SplashTextAlignment result = {};
-
-        string textAlignName = Config::get<string>("textAlignment", "center");
-        result.textAlignment = DWRITE_TEXT_ALIGNMENT_CENTER;
-        result.paraAlignment = DWRITE_PARAGRAPH_ALIGNMENT_CENTER;
-
-        try {
-            result.textAlignment = static_cast<DWRITE_TEXT_ALIGNMENT>(Config::getFrom<int>("textAlignments", textAlignName, 2));
-            switch (result.textAlignment) {
-                case DWRITE_TEXT_ALIGNMENT_LEADING:
-                    result.paraAlignment = DWRITE_PARAGRAPH_ALIGNMENT_NEAR;
-                    break;
-                case DWRITE_TEXT_ALIGNMENT_CENTER:
-                    result.paraAlignment = DWRITE_PARAGRAPH_ALIGNMENT_NEAR;
-                    break;
-                case DWRITE_TEXT_ALIGNMENT_TRAILING:
-                    result.paraAlignment = DWRITE_PARAGRAPH_ALIGNMENT_FAR;
-                    break;
-            }
-        } catch (exception& ex) {
-            log::error("Invalid value passed to textAlign {}", ex.what());
-        }
-
-        return result;
-    }
-
     LRESULT CALLBACK Splash::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
         switch (uMsg) {
             case WM_SPLASH_CLOSE:
                 if (hSplash) {
                     if (fadeOut) {
-                        useText = false; //easier than fading the text
+                        useText = false;
                         _isClosing = true;
                     } else {
-                        log::info("Destroying Splash");
-                        log::info("Thread ID: {}", sThreadId);
                         sSKSELogFile.close();
                         DestroyWindow(hSplash);
                     }
                 }
 
                 return 0;
-
             case WM_SETCURSOR:
                 SetCursor(LoadCursor(nullptr, IDC_ARROW));
                 return TRUE;
-
             case WM_NCHITTEST:
-                return Splash::draggable ? HTCAPTION : HTCLIENT;
-
+                return draggable ? HTCAPTION : HTCLIENT;
             case WM_MOUSEACTIVATE:
                 return MA_NOACTIVATE;
-           
             case WM_DESTROY:
-                log::info("Posting Quit Message");
-                log::info("Thread ID: {}", sThreadId);
-                PostQuitMessage(0);
                 sRunning = false;
+                CleanUpD2D(); // paranoia
+                PostQuitMessage(0);
                 return 0;
         }
+
         return DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
 
@@ -141,7 +106,6 @@ namespace SplashNG {
                 pSpinnerFrames->at(i).Reset();
             }
         }
-        
     }
 
     HRESULT Splash::InitializeD2D() {
@@ -167,9 +131,9 @@ namespace SplashNG {
         if (SUCCEEDED(hr)) {
             hr = pRenderTarget->CreateSolidColorBrush(
                 D2D1::ColorF(RGB(
-                   fontColorB,
-                   fontColorG, 
-                   fontColorR)
+                   textColorB,
+                   textColorG, 
+                   textColorR)
                 ), 
                 pBrush.GetAddressOf()
             );
@@ -187,10 +151,10 @@ namespace SplashNG {
             hr = pIDWriteFactory->CreateTextFormat(
                 font.c_str(), 
                 nullptr, 
-                DWRITE_FONT_WEIGHT_NORMAL,
-                DWRITE_FONT_STYLE_NORMAL, 
+                textWeight,
+                textStyle, 
                 DWRITE_FONT_STRETCH_NORMAL, 
-                fontSize,
+                textSize,
                 L"", 
                 pIDWriteTextFormat.GetAddressOf()
             );
@@ -274,7 +238,7 @@ namespace SplashNG {
         pRenderTarget->BindDC(hdcMem, &rc);
 
         std::wstring wline(SKSELastLogLine.begin(), SKSELastLogLine.end());
-
+        
         D2D1_SIZE_F sz = pRenderTarget->GetSize();
         D2D1_RECT_F bgRect = D2D1::RectF(
             0, 
@@ -291,11 +255,35 @@ namespace SplashNG {
         );
         
         D2D1_RECT_F textRect = D2D1::RectF(
-            textX + fontPadding, 
-            textY + fontPadding, 
-            sz.width - fontPadding, 
-            sz.height - pIDWriteTextFormat->GetFontSize() - fontPadding
+            textX + textPadding, 
+            textY + textPadding, 
+            textX + bgRect.right, 
+            textY + bgRect.bottom
         );
+
+        IDWriteTextLayout* textLayout;
+        HRESULT hr = pIDWriteFactory->CreateTextLayout(
+            wline.c_str(), 
+            wline.length(), 
+            pIDWriteTextFormat.Get(),
+            textRect.right - textRect.left, 
+            textRect.bottom - textRect.right, 
+            &textLayout
+        );
+
+        if (SUCCEEDED(hr)) {
+            DWRITE_TEXT_METRICS metrics = {};
+            textLayout->GetMetrics(&metrics);
+            textRect.right = textRect.left + metrics.widthIncludingTrailingWhitespace;
+            
+            if (textRect.right > bgRect.right) textRect.right = bgRect.right;
+            if (checkOverlap(spRect, textRect)) {
+                if (textX < spinnerX) textRect.right = spRect.left;
+                if (textX > spinnerX) textRect.left = spRect.right;
+            }
+
+            textLayout->Release();
+        }
 
         pRenderTarget->BeginDraw();
         pRenderTarget->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
@@ -317,16 +305,18 @@ namespace SplashNG {
             );
         }
 
-        if (useText) {        
+        if (useText) {
+            pRenderTarget->PushAxisAlignedClip(textRect, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
             pRenderTarget->DrawText(wline.c_str(),
                 wline.length(), 
                 pIDWriteTextFormat.Get(), 
                 textRect,
                 pBrush.Get()
             );
+            pRenderTarget->PopAxisAlignedClip();
         }
-
-        HRESULT hr = pRenderTarget->EndDraw();
+        
+        hr = pRenderTarget->EndDraw();
 
         if (FAILED(hr)) {
             pRenderTarget.Reset();
@@ -337,6 +327,7 @@ namespace SplashNG {
         POINT ptDest = {};
         RECT wndRc = {};
         GetWindowRect(hSplash, &wndRc);
+
         ptDest.x = wndRc.left;
         ptDest.y = wndRc.top;
 
@@ -371,11 +362,11 @@ namespace SplashNG {
         height = Config::get<int>("height", FALLBACK_HEIGHT);
 
         font = Config::get<wstring>("textFont", FALLBACK_FONT);
-        fontSize = Config::get<int>("textFontSize", FALLBACK_FONT_SIZE);
-        fontColorR = Config::get<int>("textColorR", 255);
-        fontColorG = Config::get<int>("textColorG", 255);
-        fontColorB = Config::get<int>("textColorB", 255);
-        fontPadding = Config::get<float>("textPadding", FALLBACK_FONT_PADDING);
+        textSize = Config::get<int>("textFontSize", FALLBACK_FONT_SIZE);
+        textColorR = Config::get<int>("textColorR", 255);
+        textColorG = Config::get<int>("textColorG", 255);
+        textColorB = Config::get<int>("textColorB", 255);
+        textPadding = Config::get<float>("textPadding", FALLBACK_FONT_PADDING);
 
         fadeIn = Config::get<bool>("fadeIn", false);
         fadeOut = Config::get<bool>("fadeOut", false);
@@ -392,6 +383,9 @@ namespace SplashNG {
 
         textX = Config::get<int>("textX", 0);
         textY = Config::get<int>("textY", 0);
+
+        textWeight = getTextWeight();
+        textStyle = getTextStyle();
 
         SplashTextAlignment splashTextAlign = getTextAlignment();
         textAlign = splashTextAlign.textAlignment;

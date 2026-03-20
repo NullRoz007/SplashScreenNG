@@ -107,6 +107,7 @@ if(DEFINED OUTPUT_FOLDER)
             COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                 "$<TARGET_FILE:${PROJECT_NAME}>"
                 "${RELEASE_DLL_DST}/$<TARGET_FILE_NAME:${PROJECT_NAME}>"
+
             COMMAND "${CMAKE_COMMAND}" -E rm -f "${RELEASE_ZIP}"
             COMMAND "${CMAKE_COMMAND}" -E chdir "${RELEASE_DST}"
                 "${CMAKE_COMMAND}" -E tar "cfv" "${RELEASE_ZIP}" --format=zip "."

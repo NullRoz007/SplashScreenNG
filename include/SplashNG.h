@@ -1,6 +1,4 @@
 #pragma once
-#define WINVER 0x0605
-
 #include <d2d1.h>
 #include <dwrite.h>
 #include <windows.h>
@@ -52,16 +50,17 @@ namespace SplashNG {
         static bool useText;
         static int textX;
         static int textY;
-
+        static wstring font;
+        static int textSize;
+        static int textColorR;
+        static int textColorG;
+        static int textColorB;
+        static float textPadding;
         static DWRITE_TEXT_ALIGNMENT textAlign;
         static DWRITE_PARAGRAPH_ALIGNMENT paraAlign;
+        static DWRITE_FONT_WEIGHT textWeight;
+        static DWRITE_FONT_STYLE textStyle;
 
-        static wstring font;
-        static int fontSize;
-        static int fontColorR;
-        static int fontColorG;
-        static int fontColorB;
-        static float fontPadding;
 
         static float targetOpacity;
         static float currentOpacity;
