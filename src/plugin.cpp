@@ -14,26 +14,20 @@ using namespace SKSE::stl;
 using namespace SplashNG;
 
 void OnMessage(MessagingInterface::Message* message) {
-    bool forceFocus = Config::get<bool>("forceFocus", false);
     uint32_t kCloseEvent = Config::get<int>("closeOn", 6);
-
-    if (message->type == MessagingInterface::kInputLoaded && forceFocus) {
-        
+    if (message->type == MessagingInterface::kInputLoaded) {
         HWND hwndSkyrim = FindWindow(nullptr, L"Skyrim Special Edition");
         if (hwndSkyrim == 0) hwndSkyrim = FindWindow(nullptr, L"Skyrim Anniversary Edition");
+
         if (hwndSkyrim != 0) {
-            log::info("Forcing focus to HWND {:#x}", reinterpret_cast<uintptr_t>(hwndSkyrim));
-
-            DWORD foregroundThread = GetWindowThreadProcessId(GetForegroundWindow(), nullptr);
-            DWORD skyrimThread = GetWindowThreadProcessId(hwndSkyrim, nullptr);
-            
-            AttachThreadInput(GetCurrentThreadId(), skyrimThread, TRUE);
-            SetForegroundWindow(hwndSkyrim);
-            SetFocus(hwndSkyrim);
-            SetActiveWindow(hwndSkyrim);
-
-            SetWindowPos(hwndSkyrim, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-            SetWindowPos(hwndSkyrim, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            HICON hIcon = nullptr;
+            hIcon = (HICON)SendMessage(Splash::hSplash, WM_GETICON, ICON_BIG, 0);
+            if (hIcon) {
+                SendMessage(hwndSkyrim, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+                SendMessage(hwndSkyrim, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+                SetClassLongPtr(hwndSkyrim, GCLP_HICON, (LONG_PTR)hIcon);
+                SetClassLongPtr(hwndSkyrim, GCLP_HICONSM, (LONG_PTR)hIcon);
+            }
         }
     }
 

@@ -5,7 +5,7 @@
 #include <wingdi.h>
 #include <winuser.h>
 #include <wrl/client.h>
-#include <shellscalingapi.h>
+#include <shellapi.h>
 
 #include <atomic>
 #include <fstream>

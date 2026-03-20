@@ -15,6 +15,7 @@ namespace SplashNG {
         template <typename T>
         static T getFrom(const std::string& from, const std::string& name, const T& fallbackValue = T{});
         static void Initialize();
+        static bool IsInitialized();
     private:
         static json j;
     };

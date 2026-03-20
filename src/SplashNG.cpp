@@ -42,6 +42,7 @@ namespace SplashNG {
     int Splash::textColorG;
     int Splash::textColorB;
     float Splash::textPadding;
+
     DWRITE_FONT_WEIGHT Splash::textWeight;
     DWRITE_FONT_STYLE Splash::textStyle;
     DWRITE_TEXT_ALIGNMENT Splash::textAlign;
@@ -356,7 +357,7 @@ namespace SplashNG {
     }
 
     void Splash::SetupConfig() {
-        Config::Initialize();
+        if(!Config::IsInitialized()) Config::Initialize();
 
         width = Config::get<int>("width", FALLBACK_WIDTH);
         height = Config::get<int>("height", FALLBACK_HEIGHT);
@@ -462,6 +463,16 @@ namespace SplashNG {
 
         ShowWindow(hSplash, SW_SHOWNOACTIVATE);
 
+        LPSTR szFileName = (LPSTR)malloc(MAX_PATH);
+        GetModuleFileNameA(NULL, szFileName, MAX_PATH);
+        HICON hIconBig = NULL;
+        if (szFileName) {
+            ExtractIconExA(szFileName, 0, &hIconBig, NULL, 1);
+            SendMessage(hSplash, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
+            SendMessage(hSplash, WM_SETICON, ICON_SMALL, (LPARAM)hIconBig);
+        }
+
+        free(szFileName);
         sRunning = true;
     }
 

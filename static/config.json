@@ -35,8 +35,7 @@
   },
   "textWeights": {
     "normal": 400,
-    "bold": 700,
-    "italic": 0
+    "bold": 700
   },
   "textStyles": {
     "normal": 0,

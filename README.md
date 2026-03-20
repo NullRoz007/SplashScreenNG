@@ -51,7 +51,6 @@ Place `config.json` in `Data/SKSE/Plugins/SplashScreenNG/`. All fields are optio
 ### Behaviour
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `forceFocus` | bool | `true` | Attempt to force Skyrim to the front |
 | `closeOn` | int | `8` | SKSE load stage at which the splash closes. 6 = kInputLoaded, 8 = kDataLoaded |
 
 ### Window Styles

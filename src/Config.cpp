@@ -77,6 +77,10 @@ namespace SplashNG {
         }
     }
 
+    bool Config::IsInitialized() { 
+        return (Config::j != NULL);
+    }
+
     template int Config::get<int>(const std::string&, const int&);
     template float Config::get<float>(const std::string&, const float&);
     template double Config::get<double>(const std::string&, const double&);
