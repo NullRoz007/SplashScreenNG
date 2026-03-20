@@ -58,7 +58,7 @@ namespace SplashNG {
         HINSTANCE hModule = GetModuleHandle(nullptr);
         wchar_t dllPath[MAX_PATH];
         GetModuleFileName(hModule, dllPath, MAX_PATH);
-        filesystem::path configPath = filesystem::path(dllPath).parent_path() / L"Data\\SKSE\\Plugins\\SplashScreenNG\\splash.json";
+        filesystem::path configPath = filesystem::path(dllPath).parent_path() / L"Data\\SKSE\\Plugins\\SplashScreenNG\\config.json";
         log::info("Config Path: {}", configPath.string());
        
         std::ifstream f(configPath);

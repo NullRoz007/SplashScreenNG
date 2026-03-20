@@ -1,42 +1,36 @@
 {
-  "splash": "splash_trans.png",
+  "splash": "splash.png",
   "spinner": "loading.gif",
-
-  "width": 835,
-  "height": 400,
+  "width": 1086,
+  "height": 282,
   "forceFocus": true,
   "closeOn": 8,
   "draggable": true,
-  "windowStyle": "forcedicon",
-
+  "windowStyle": "forced",
   "opacity": 1,
   "fadeIn": true,
   "fadeOut": true,
   "fadeStep": 0.02,
-
-  "useSpinner": true,
-  "spinnerX": 780,
-  "spinnerY": 350,
+  "useSpinner": false,
+  "spinnerX": 1044,
+  "spinnerY": 240,
   "spinnerWidth": 32,
   "spinnerHeight": 32,
-
   "useText": true,
-  "textFont": "Segoe UI Semibold",
+  "textFont": "Segoe UI Bold",
   "textFontSize": 12,
-  "textPadding": 0,
+  "textPadding": 12,
   "textColorR": 255,
   "textColorG": 255,
   "textColorB": 255,
   "textX": 0,
-  "textY": 320,
+  "textY": 230,
   "textAlignment": "center",
-
   "windowStyles": {
     "forced": 134217736,
     "forcedicon": 8,
     "normal": 0
   },
-
   "textAlignments": {
     "center": 2,
     "left": 0,

@@ -93,7 +93,6 @@ if(DEFINED OUTPUT_FOLDER)
         set(RELEASE_DST "${CMAKE_CURRENT_SOURCE_DIR}/release")
         set(RELEASE_STATIC_DST "${RELEASE_DST}/SKSE/Plugins/SplashScreenNG")
         set(RELEASE_DLL_DST "${RELEASE_DST}/SKSE/Plugins")
-        set(RELEASE_FOMOD_DST "${RELEASE_DST}/fomod")
         set(RELEASE_ZIP "${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_NAME}-release.zip")
 
         file(MAKE_DIRECTORY "${RELEASE_DST}")
@@ -108,12 +107,7 @@ if(DEFINED OUTPUT_FOLDER)
             COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                 "$<TARGET_FILE:${PROJECT_NAME}>"
                 "${RELEASE_DLL_DST}/$<TARGET_FILE_NAME:${PROJECT_NAME}>"
-            COMMAND "${CMAKE_COMMAND}" -E copy_directory
-                "${CMAKE_CURRENT_SOURCE_DIR}/fomod"
-                "${RELEASE_FOMOD_DST}"
             COMMAND "${CMAKE_COMMAND}" -E rm -f "${RELEASE_ZIP}"
-            # Use cmake -P to cd and tar in a single subprocess — avoids WORKING_DIRECTORY
-            # being applied before make_directory has had a chance to run.
             COMMAND "${CMAKE_COMMAND}" -E chdir "${RELEASE_DST}"
                 "${CMAKE_COMMAND}" -E tar "cfv" "${RELEASE_ZIP}" --format=zip "."
             VERBATIM

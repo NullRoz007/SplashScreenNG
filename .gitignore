@@ -21,3 +21,4 @@ cmake-build*
 # Release staging directory and zip
 release/
 *-release.zip
+configs/
