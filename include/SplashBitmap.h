@@ -19,7 +19,8 @@ namespace SplashNG {
             PCWSTR path, 
             UINT destWidth, 
             UINT destHeight, 
-            ID2D1Bitmap** ppBitmap
+            ID2D1Bitmap** ppBitmap,
+            vector<uint8_t>* ppPixels = nullptr
         );
 
         static HRESULT GetFramesFromFile(

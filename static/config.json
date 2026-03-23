@@ -1,21 +1,25 @@
 {
-  "splash": "splash.png",
+  "splash": "splash_wall.png",
   "spinner": "loading.gif",
   "width": 405,
   "height": 282,
+  "fullscreen": true,
   "forceFocus": true,
   "closeOn": 8,
-  "draggable": true,
+  "draggable": false,
   "windowStyle": "forced",
+
   "opacity": 1,
   "fadeIn": true,
   "fadeOut": true,
   "fadeStep": 0.02,
+
   "useSpinner": true,
-  "spinnerX": 370,
+  "spinnerX": 372,
   "spinnerY": 130,
   "spinnerWidth": 32,
   "spinnerHeight": 32,
+
   "useText": true,
   "textFont": "Trebuchet MS",
   "textFontSize": 12,
@@ -28,6 +32,9 @@
   "textWeight": "normal",
   "textStyle": "normal",
   "textAlignment": "left",
+
+  "useCursor": true,
+  "cursorScale": 1.0,
   "windowStyles": {
     "forced": 134217736,
     "forcedicon": 8,

@@ -3,76 +3,32 @@
 #include <SplashBitmap.h>
 #include <Config.h>
 #include <Util.hpp>
+#include <SplashCursor.h>
 
 using namespace SKSE;
 
 namespace SplashNG {
-    atomic_bool Splash::sRunning{false};
-    HINSTANCE Splash::hModule;
-    HWND Splash::hSplash;
+    Splash* Splash::gSplash = nullptr;
+    void Splash::ShowSplash() {
+        if(!gSplash) gSplash = new Splash();
+        gSplash->ShowSplashImpl();
+    }
 
-    thread Splash::sThread;
-    string Splash::sThreadId;
-
-    ComPtr<ID2D1Factory> Splash::pD2DFactory;
-    ComPtr<ID2D1DCRenderTarget> Splash::pRenderTarget;
-    ComPtr<ID2D1SolidColorBrush> Splash::pBrush;
-    ComPtr<IDWriteFactory> Splash::pIDWriteFactory;
-    ComPtr<IDWriteTextFormat> Splash::pIDWriteTextFormat;
-    ComPtr<ID2D1Bitmap> Splash::pBackgroundBitmap;
-    vector<ComPtr<ID2D1Bitmap>>* Splash::pSpinnerFrames;
-
-    ifstream Splash::sSKSELogFile;
-    string Splash::SKSELastLogLine;
-    string Splash::SKSELogPath;
-
-    int Splash::height;
-    int Splash::width;
-    bool Splash::draggable;
-    bool Splash::_isClosing;
-    wstring Splash::splashFile;
-    wstring Splash::spinnerFile;
-
-    int Splash::textX;
-    int Splash::textY;
-    
-    wstring Splash::font;
-    int Splash::textSize;
-    int Splash::textColorR;
-    int Splash::textColorG;
-    int Splash::textColorB;
-    float Splash::textPadding;
-
-    DWRITE_FONT_WEIGHT Splash::textWeight;
-    DWRITE_FONT_STYLE Splash::textStyle;
-    DWRITE_TEXT_ALIGNMENT Splash::textAlign;
-    DWRITE_PARAGRAPH_ALIGNMENT Splash::paraAlign;
-
-    float Splash::currentOpacity;
-    float Splash::targetOpacity;
-    float Splash::fadeStep;
-    bool Splash::fadeIn;
-    bool Splash::fadeOut;
-
-    int Splash::spinnerWidth;
-    int Splash::spinnerHeight;
-    int Splash::spinnerX;
-    int Splash::spinnerY;
-
-    bool Splash::useText;
-    bool Splash::useSpinner;
-    int Splash::framesElapsed = 0;
+    void Splash::CloseSplash() {
+        if (gSplash) gSplash->CloseSplashImpl();
+    }
 
     LRESULT CALLBACK Splash::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+        Splash* self = gSplash;
         switch (uMsg) {
             case WM_SPLASH_CLOSE:
-                if (hSplash) {
-                    if (fadeOut) {
-                        useText = false;
-                        _isClosing = true;
+                if (self->hSplash) {
+                    if (self->fadeOut) {
+                        self->useText = false;
+                        self->_isClosing = true;
                     } else {
-                        sSKSELogFile.close();
-                        DestroyWindow(hSplash);
+                        self->sSKSELogFile.close();
+                        DestroyWindow(self->hSplash);
                     }
                 }
 
@@ -81,12 +37,12 @@ namespace SplashNG {
                 SetCursor(LoadCursor(nullptr, IDC_ARROW));
                 return TRUE;
             case WM_NCHITTEST:
-                return draggable ? HTCAPTION : HTCLIENT;
+                return self->draggable ? HTCAPTION : HTCLIENT;
             case WM_MOUSEACTIVATE:
                 return MA_NOACTIVATE;
             case WM_DESTROY:
-                sRunning = false;
-                CleanUpD2D(); // paranoia
+                self->sRunning = false;
+                self->CleanUpD2D(); // paranoia
                 PostQuitMessage(0);
                 return 0;
         }
@@ -182,15 +138,26 @@ namespace SplashNG {
                 splashFile.c_str(), 
                 width,
                 height,
-                pBackgroundBitmap.GetAddressOf()
+                pBackgroundBitmap.GetAddressOf(),
+                &backgroundPixels
             ); 
         }
 
         if (useSpinner) {
-            hr = SplashBitmap::GetFramesFromFile(pRenderTarget.Get(), spinnerFile.c_str(), spinnerWidth, spinnerHeight,
-                                                 pSpinnerFrames);
+            hr = SplashBitmap::GetFramesFromFile(pRenderTarget.Get(), spinnerFile.c_str(), spinnerWidth, spinnerHeight,                                  pSpinnerFrames);
             if (SUCCEEDED(hr)) {
                 log::info("spinner frames: {}", pSpinnerFrames->size());
+            }
+        }
+
+        if(useCursor) {
+            wchar_t dllPath[MAX_PATH];
+            GetModuleFileName(hModule, dllPath, MAX_PATH);
+            filesystem::path cursorPath = filesystem::path(dllPath).parent_path() / L"Data\\interface\\cursormenu.swf";
+
+            if(filesystem::exists(cursorPath)) {
+                Splash::cursor = new SplashCursor(cursorPath.string(), pRenderTarget);
+                cursor->CreateCursorBitmap(pD2DFactory, pRenderTarget, cursorScale);
             }
         }
 
@@ -226,7 +193,7 @@ namespace SplashNG {
             nullptr, 
             0
         );
-        
+    
         HBITMAP hOldBitmap = static_cast<HBITMAP>(SelectObject(hdcMem, hBitmap));
 
         RECT rc = {
@@ -283,6 +250,10 @@ namespace SplashNG {
                 if (textX > spinnerX) textRect.left = spRect.right;
             }
 
+            if (fullscreen) {
+                textRect.top -= metrics.height;    
+            }
+
             textLayout->Release();
         }
 
@@ -317,6 +288,21 @@ namespace SplashNG {
             pRenderTarget->PopAxisAlignedClip();
         }
         
+        POINT pt;
+        GetCursorPos(&pt);
+        ScreenToClient(hSplash, &pt);
+
+        bool transparent = true;
+        if (!backgroundPixels.empty() && pt.x >= 0 && pt.y >= 0 && pt.x < width && pt.y < height) {
+            uint8_t alpha = backgroundPixels[(pt.y * width + pt.x) * 4 + 3];
+            transparent = alpha == 0;
+        }
+
+        if (!transparent && cursor) {
+            cursor->RenderCursor(pD2DFactory, pRenderTarget, (float)pt.x, (float)pt.y);
+            ShowCursor(FALSE);
+        }
+
         hr = pRenderTarget->EndDraw();
 
         if (FAILED(hr)) {
@@ -361,6 +347,7 @@ namespace SplashNG {
 
         width = Config::get<int>("width", FALLBACK_WIDTH);
         height = Config::get<int>("height", FALLBACK_HEIGHT);
+        fullscreen = Config::get<bool>("fullscreen", false);
 
         font = Config::get<wstring>("textFont", FALLBACK_FONT);
         textSize = Config::get<int>("textFontSize", FALLBACK_FONT_SIZE);
@@ -388,6 +375,8 @@ namespace SplashNG {
         textWeight = getTextWeight();
         textStyle = getTextStyle();
 
+        windowStyleName = Config::get<string>("windowStyle", "forced");
+
         SplashTextAlignment splashTextAlign = getTextAlignment();
         textAlign = splashTextAlign.textAlignment;
         paraAlign = splashTextAlign.paraAlignment;
@@ -408,10 +397,25 @@ namespace SplashNG {
             filesystem::path(dllPath).parent_path() / L"Data\\SKSE\\Plugins\\SplashScreenNG\\";
         spinnerPath /= spinner;
         spinnerFile = spinnerPath.wstring();
+
+        forceFocus = Config::get<bool>("forceFocus", false);
+
+        useCursor = Config::get<bool>("useCursor", false);
+        cursorScale = Config::get<float>("cursorScale");
+
+        if(fullscreen) {
+            width = GetSystemMetrics(SM_CXSCREEN);
+            height = GetSystemMetrics(SM_CYSCREEN);
+            spinnerX = width - spinnerWidth;
+            spinnerY = height - spinnerHeight;
+            textX = 0 + textPadding;
+            textY = height - textPadding;
+            windowStyleName = "forcedicon";
+            forceFocus = true;
+        }
     }
 
     void Splash::CreateSplashWindow() {
-        string windowStyleName = Config::get<string>("windowStyle", "forced");
         uint32_t windowStyle = Config::getFrom<int>("windowStyles", windowStyleName, WS_EX_TOPMOST | WS_EX_NOACTIVATE);
         windowStyle |= WS_EX_LAYERED;  // force layered
 
@@ -443,7 +447,7 @@ namespace SplashNG {
             std::string(spinnerFile.begin(), spinnerFile.end())
         );
 
-        hSplash = CreateWindowEx(windowStyle, CLASS_NAME, L"", WS_POPUP, splashPositionX, splashPositionY, width,
+        hSplash = CreateWindowEx(windowStyle, CLASS_NAME, L"SplashScreenNG", WS_POPUP, splashPositionX, splashPositionY, width,
                                  height, nullptr, nullptr, hModule, nullptr);
 
         HRGN hitRegion = CreateRectRgn(0, 0, width, height);
@@ -470,6 +474,8 @@ namespace SplashNG {
             ExtractIconExA(szFileName, 0, &hIconBig, NULL, 1);
             SendMessage(hSplash, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
             SendMessage(hSplash, WM_SETICON, ICON_SMALL, (LPARAM)hIconBig);
+            SetClassLongPtr(hSplash, GCLP_HICON, (LONG_PTR)hIconBig);
+            SetClassLongPtr(hSplash, GCLP_HICONSM, (LONG_PTR)hIconBig);
         }
 
         free(szFileName);
@@ -508,14 +514,14 @@ namespace SplashNG {
         }
     }
 
-    void Splash::ShowSplash() {
+    void Splash::ShowSplashImpl() {
         if (sRunning) return;
         log::info("Creating Splash Thread");
-        sThread = std::thread(ThreadEntry);
+        sThread = std::thread(&Splash::ThreadEntry, this);
         sThread.detach();
     }
 
-    void Splash::CloseSplash() { PostMessage(hSplash, WM_SPLASH_CLOSE, 0, 0); }
+    void Splash::CloseSplashImpl() { PostMessage(hSplash, WM_SPLASH_CLOSE, 0, 0); }
 
     HRESULT Splash::InitializeSKSELog() {
         auto pathOpt = log::log_directory();

@@ -64,7 +64,8 @@ namespace SplashNG {
         PCWSTR path, 
         UINT destWidth,
         UINT destHeight, 
-        ID2D1Bitmap** ppBitmap
+        ID2D1Bitmap** ppBitmap,
+        vector<uint8_t>* pPixels
     ) 
     {
         if (!pIWICFactory) return E_POINTER;
@@ -97,7 +98,18 @@ namespace SplashNG {
         }
         
         if (SUCCEEDED(hr)) {
+            pPixels->resize(destWidth * destHeight * 4);
+            pConverter->CopyPixels(
+                nullptr,
+                destWidth * 4,
+                destWidth * destHeight * 4,
+                pPixels->data()
+            );
+
             hr = pRenderTarget->CreateBitmapFromWicBitmap(pConverter.Get(), nullptr, ppBitmap);
+            
+
+
         }
 
         return hr;

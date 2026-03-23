@@ -15,19 +15,24 @@ using namespace SplashNG;
 
 void OnMessage(MessagingInterface::Message* message) {
     uint32_t kCloseEvent = Config::get<int>("closeOn", 6);
-    if (message->type == MessagingInterface::kInputLoaded) {
+    if (message->type == MessagingInterface::kInputLoaded && Config::get<bool>("forceFocus", false)) {
         HWND hwndSkyrim = FindWindow(nullptr, L"Skyrim Special Edition");
         if (hwndSkyrim == 0) hwndSkyrim = FindWindow(nullptr, L"Skyrim Anniversary Edition");
-
         if (hwndSkyrim != 0) {
-            HICON hIcon = nullptr;
-            hIcon = (HICON)SendMessage(Splash::hSplash, WM_GETICON, ICON_BIG, 0);
-            if (hIcon) {
-                SendMessage(hwndSkyrim, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
-                SendMessage(hwndSkyrim, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
-                SetClassLongPtr(hwndSkyrim, GCLP_HICON, (LONG_PTR)hIcon);
-                SetClassLongPtr(hwndSkyrim, GCLP_HICONSM, (LONG_PTR)hIcon);
-            }
+            log::info("Forcing focus to HWND {:#x}", reinterpret_cast<uintptr_t>(hwndSkyrim));
+
+            DWORD foregroundThread = GetWindowThreadProcessId(GetForegroundWindow(), nullptr);
+            DWORD skyrimThread = GetWindowThreadProcessId(hwndSkyrim, nullptr);
+
+            AttachThreadInput(foregroundThread, skyrimThread, TRUE);
+            BringWindowToTop(hwndSkyrim);
+            SetForegroundWindow(hwndSkyrim);
+            SetFocus(hwndSkyrim);
+            SetActiveWindow(hwndSkyrim);
+            AttachThreadInput(foregroundThread, skyrimThread, FALSE);
+
+            SetWindowPos(hwndSkyrim, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            SetWindowPos(hwndSkyrim, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
         }
     }
 
@@ -71,6 +76,10 @@ SKSEPluginLoad(const SKSE::LoadInterface *skse) {
     
     Config::Initialize();
     Splash::ShowSplash();
+
+    HINSTANCE hModule = GetModuleHandle(nullptr);
+    wchar_t dllPath[MAX_PATH];
+    GetModuleFileName(hModule, dllPath, MAX_PATH);
 
     SKSE::GetMessagingInterface()->RegisterListener(OnMessage);
 
