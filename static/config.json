@@ -1,5 +1,5 @@
 {
-  "splash": "splash_wall.png",
+  "splash": "splash_full.png",
   "spinner": "loading.gif",
   "width": 405,
   "height": 282,
@@ -7,7 +7,7 @@
   "forceFocus": true,
   "closeOn": 8,
   "draggable": false,
-  "windowStyle": "forced",
+  "windowStyle": "normal",
 
   "opacity": 1,
   "fadeIn": true,
@@ -34,7 +34,7 @@
   "textAlignment": "left",
 
   "useCursor": true,
-  "cursorScale": 1.0,
+  "cursorScale": 1.25,
   "windowStyles": {
     "forced": 134217736,
     "forcedicon": 8,

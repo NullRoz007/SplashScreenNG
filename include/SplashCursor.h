@@ -21,10 +21,9 @@
 #pragma pop_macro("RECT")
 #pragma pop_macro("RGB")
 
+using BitmapMap = std::map<uint16_t, Microsoft::WRL::ComPtr<ID2D1Bitmap>>;
 namespace SplashNG {
-
     constexpr float TWIPS = 1.0f / 20.0f;
-
     struct SubShape {
         std::vector<SHAPERECORD*> records;
         std::vector<FILLSTYLE>* fillStyles = nullptr;
@@ -51,7 +50,7 @@ namespace SplashNG {
     private:
         SwfParser swfParser;
         std::map<DefineShape3Tag*, std::vector<SubShape>> shapeSubShapes;
-        std::map<uint16_t, Microsoft::WRL::ComPtr<ID2D1Bitmap>> losslessBitmaps;
+        BitmapMap losslessBitmaps;
         Microsoft::WRL::ComPtr<ID2D1Bitmap> cursorBitmap;
         void RenderBitmapToTarget(ID2D1Bitmap* bitmap, ID2D1BitmapRenderTarget* rt);
         void RenderGradientToTarget(FILLSTYLE fillStyle, SubShape subShape, ID2D1BitmapRenderTarget* rt, ID2D1Factory* factory);

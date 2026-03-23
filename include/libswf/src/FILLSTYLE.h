@@ -23,10 +23,12 @@ public:
 	};
 	bool inShape3;
 	RGB color;
+	uint8_t alpha = 255;
 	MATRIX gradientMatrix;
 	GRADIENT gradient;
 	int bitmapId;
 	MATRIX bitmapMatrix;
+
 
 	FILLSTYLE();
 	FILLSTYLE(DataStream* ds, int shapeNum);

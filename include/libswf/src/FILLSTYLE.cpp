@@ -13,11 +13,14 @@ void FILLSTYLE::readData(DataStream *ds, int shapeNum) {
 	fillStyleType = ds->readUI8();
 	if (fillStyleType == fillStyleTypes::SOLID) {
 		if (shapeNum >= 3) {
-			color = RGBA(ds);
+			RGBA rgba(ds);
+			color = rgba;
+			alpha = rgba.alpha;
 		} else {
 			color = RGB(ds);
 		}
 	}
+
 	if ((fillStyleType ==fillStyleTypes::LINEAR_GRADIENT)
 		|| (fillStyleType ==fillStyleTypes::RADIAL_GRADIENT)
 		|| (fillStyleType ==fillStyleTypes::FOCAL_RADIAL_GRADIENT)) {

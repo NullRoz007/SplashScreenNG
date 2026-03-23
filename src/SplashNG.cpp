@@ -144,7 +144,7 @@ namespace SplashNG {
         }
 
         if (useSpinner) {
-            hr = SplashBitmap::GetFramesFromFile(pRenderTarget.Get(), spinnerFile.c_str(), spinnerWidth, spinnerHeight,                                  pSpinnerFrames);
+            hr = SplashBitmap::GetFramesFromFile(pRenderTarget.Get(), spinnerFile.c_str(), spinnerWidth, spinnerHeight, pSpinnerFrames);
             if (SUCCEEDED(hr)) {
                 log::info("spinner frames: {}", pSpinnerFrames->size());
             }
@@ -153,9 +153,16 @@ namespace SplashNG {
         if(useCursor) {
             wchar_t dllPath[MAX_PATH];
             GetModuleFileName(hModule, dllPath, MAX_PATH);
-            filesystem::path cursorPath = filesystem::path(dllPath).parent_path() / L"Data\\interface\\cursormenu.swf";
 
-            if(filesystem::exists(cursorPath)) {
+            filesystem::path customCursorPath = filesystem::path(dllPath).parent_path() / L"Data\\interface\\cursormenu.swf";
+            filesystem::path cursorPath = filesystem::path(dllPath).parent_path() / L"Data\\SKSE\\Plugins\\SplashScreenNG\\default_cursormenu.swf";;
+
+            if(filesystem::exists(customCursorPath)) {
+               cursorPath = customCursorPath;
+            }
+
+            log::info("Loading cursor: path={}", cursorPath.string());
+            if(cursorPath.string() != "") {
                 Splash::cursor = new SplashCursor(cursorPath.string(), pRenderTarget);
                 cursor->CreateCursorBitmap(pD2DFactory, pRenderTarget, cursorScale);
             }
@@ -401,7 +408,7 @@ namespace SplashNG {
         forceFocus = Config::get<bool>("forceFocus", false);
 
         useCursor = Config::get<bool>("useCursor", false);
-        cursorScale = Config::get<float>("cursorScale");
+        cursorScale = Config::get<float>("cursorScale", 1.0);
 
         if(fullscreen) {
             width = GetSystemMetrics(SM_CXSCREEN);
@@ -410,7 +417,6 @@ namespace SplashNG {
             spinnerY = height - spinnerHeight;
             textX = 0 + textPadding;
             textY = height - textPadding;
-            windowStyleName = "forcedicon";
             forceFocus = true;
         }
     }
