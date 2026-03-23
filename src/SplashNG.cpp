@@ -154,17 +154,14 @@ namespace SplashNG {
             wchar_t dllPath[MAX_PATH];
             GetModuleFileName(hModule, dllPath, MAX_PATH);
 
-            filesystem::path customCursorPath = filesystem::path(dllPath).parent_path() / L"Data\\interface\\cursormenu.swf";
-            filesystem::path cursorPath = filesystem::path(dllPath).parent_path() / L"Data\\SKSE\\Plugins\\SplashScreenNG\\default_cursormenu.swf";;
-
-            if(filesystem::exists(customCursorPath)) {
-               cursorPath = customCursorPath;
-            }
-
-            log::info("Loading cursor: path={}", cursorPath.string());
-            if(cursorPath.string() != "") {
+            filesystem::path cursorPath = filesystem::path(dllPath).parent_path() / L"Data\\interface\\cursormenu.swf";;
+            if(filesystem::exists(cursorPath)) {
+                log::info("Loading cursor: path={}", cursorPath.string());
                 Splash::cursor = new SplashCursor(cursorPath.string(), pRenderTarget);
                 cursor->CreateCursorBitmap(pD2DFactory, pRenderTarget, cursorScale);
+            } else {
+                log::info("Failed to find cursor: path={}", cursorPath.string());
+                useCursor = false;
             }
         }
 
@@ -390,13 +387,42 @@ namespace SplashNG {
 
         wstring splash = Config::get<wstring>("splash", FALLBACK_SPLASH);
         wstring spinner = Config::get<wstring>("spinner", FALLBACK_SPINNER);
+        bool randomSplash = Config::get<bool>("randomSplash", false);
+        wstring randomSplashFolder = Config::get<wstring>("randomSplashFolder", L"splashes/");
 
         wchar_t dllPath[MAX_PATH];
         GetModuleFileName(hModule, dllPath, MAX_PATH);
+
         filesystem::path splashPath =
             filesystem::path(dllPath).parent_path() / L"Data\\SKSE\\Plugins\\SplashScreenNG\\";
-        splashPath /= splash;
-        splashFile = splashPath.wstring();
+        filesystem::path splashFolderPath =
+            filesystem::path(dllPath).parent_path() / L"Data\\SKSE\\Plugins\\SplashScreenNG\\";
+        
+        splashFolderPath /= randomSplashFolder; 
+
+        if(!randomSplash) {
+            splashPath /= splash;
+            splashFile = splashPath.wstring();
+        } else if(filesystem::exists(splashFolderPath)){
+            vector<filesystem::path> paths;
+
+            try {
+                for (const auto& entry : filesystem::directory_iterator(splashFolderPath.c_str())) {
+                    if (entry.path().extension() == ".png")
+                        paths.push_back(entry);
+                }
+            } catch (const filesystem::filesystem_error& e) {
+                log::error("Filesystem error: {}", e.what());
+                return;
+            }
+
+            srand(time(NULL));
+            int selection = rand() % paths.size();
+            splashFile = paths[selection].wstring();
+            log::info("RandomSplash: selected={}", string(splashFile.begin(), splashFile.end()));
+        } else {
+            log::info("RandomSplash: {} does not exist",splashFolderPath.string());
+        }
 
         pSpinnerFrames = new vector<ComPtr<ID2D1Bitmap>>();
 
@@ -418,6 +444,7 @@ namespace SplashNG {
             textX = 0 + textPadding;
             textY = height - textPadding;
             forceFocus = true;
+            draggable = false;
         }
     }
 

@@ -56,6 +56,8 @@ namespace SplashNG {
         HWND hSplash;
         wstring splashFile;
         wstring spinnerFile;
+        bool randomSplash;
+        wstring randomSplashFolder;
         vector<uint8_t> backgroundPixels;
         int width;
         int height;

@@ -1,13 +1,15 @@
 {
-  "splash": "splash_full.png",
-  "spinner": "loading.gif",
+  "splash": "splashes/splash.png",
+  "randomSplash": false,
+  "randomSplashFolder": "fullsplashes",
+  "spinner": "spinners/loading.gif",
   "width": 405,
   "height": 282,
-  "fullscreen": true,
+  "fullscreen": false,
   "forceFocus": true,
   "closeOn": 8,
-  "draggable": false,
-  "windowStyle": "normal",
+  "draggable": true,
+  "windowStyle": "forced",
 
   "opacity": 1,
   "fadeIn": true,
@@ -15,7 +17,7 @@
   "fadeStep": 0.02,
 
   "useSpinner": true,
-  "spinnerX": 372,
+  "spinnerX": 374,
   "spinnerY": 130,
   "spinnerWidth": 32,
   "spinnerHeight": 32,
@@ -33,8 +35,8 @@
   "textStyle": "normal",
   "textAlignment": "left",
 
-  "useCursor": true,
-  "cursorScale": 1.25,
+  "useCursor": false,
+  "cursorScale": 1.0,
   "windowStyles": {
     "forced": 134217736,
     "forcedicon": 8,
