@@ -1,5 +1,8 @@
 name: BuildRelease
 
+permissions:
+  contents: write
+
 on:
   push:
     tags:
