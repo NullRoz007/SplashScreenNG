@@ -28,6 +28,15 @@ namespace SplashNG {
             pDecoder.GetAddressOf()
         );
 
+        if(FAILED(hr)) {
+            log::error(
+                "pIWICFactory->CreateDecoderFromFilename failed (HRESULT {:#010x})",
+                static_cast<unsigned>(hr)
+            );
+
+            return hr;
+        }
+
         UINT frameCount = -1;
         pDecoder->GetFrameCount(&frameCount);
         
@@ -37,8 +46,34 @@ namespace SplashNG {
 
             hr = pDecoder->GetFrame(i, pFrameSource.GetAddressOf());
             if (SUCCEEDED(hr)) hr = pIWICFactory->CreateBitmapScaler(pScaler.GetAddressOf());
+            else {
+                log::error(
+                    "pDecoder->GetFrame failed (HRESULT {:#010x})",
+                    static_cast<unsigned>(hr)
+                );
+
+                return hr;
+            }
+            
             if (SUCCEEDED(hr)) hr = pScaler->Initialize(pFrameSource.Get(), destWidth, destHeight, WICBitmapInterpolationModeHighQualityCubic);
+            else {
+                log::error(
+                    "pIWICFactory->CreateBitmapScaler(HRESULT {:#010x})",
+                    static_cast<unsigned>(hr)
+                );
+
+                return hr;
+            }
+
             if (SUCCEEDED(hr)) hr = pIWICFactory->CreateFormatConverter(pConverter.GetAddressOf());
+            else {
+                log::error(
+                    "pScaler->Initialize failed (HRESULT {:#010x})",
+                    static_cast<unsigned>(hr)
+                );
+
+                return hr;
+            }
             if (SUCCEEDED(hr)) {
                 hr = pConverter->Initialize(
                     pScaler.Get(), 
@@ -49,8 +84,26 @@ namespace SplashNG {
                     WICBitmapPaletteTypeMedianCut
                 );
             }
+            else {
+                log::error(
+                    "pIWICFactory->CreateFormatConverter failed (HRESULT {:#010x})",
+                    static_cast<unsigned>(hr)
+                );
+
+                return hr;
+            }
+
 
             if (SUCCEEDED(hr)) hr = pRenderTarget->CreateBitmapFromWicBitmap(pConverter.Get(), nullptr, pBitmap.GetAddressOf());
+            else {
+                log::error(
+                    "pConverter->Initialize failed (HRESULT {:#010x})",
+                    static_cast<unsigned>(hr)
+                );
+
+                return hr;
+            }
+
             if (SUCCEEDED(hr)) {
                 ppBitmaps->push_back(pBitmap.Get());
             }

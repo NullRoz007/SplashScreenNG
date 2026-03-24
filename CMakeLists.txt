@@ -6,9 +6,6 @@
 # If you use CMake features from higher versions, update this to match.
 cmake_minimum_required(VERSION 3.20)
 
-# Force Unicode everywhere
-target_compile_definitions(${PROJECT_NAME} PRIVATE UNICODE _UNICODE)
-
 # [BEGIN set_project_name]
 # Set your project name. This will be the name of your SKSE .dll file.
 project(_SplashScreenNG VERSION 0.0.2 LANGUAGES CXX)
@@ -47,6 +44,9 @@ add_subdirectory(include/libswf)
 add_commonlibsse_plugin(${PROJECT_NAME} SOURCES src/plugin.cpp src/SplashNG.cpp src/SplashBitmap.cpp src/Config.cpp src/SplashCursor.cpp)
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23) # <--- use C++23 standard
 target_precompile_headers(${PROJECT_NAME} PRIVATE PCH.h) # <--- PCH.h is required!
+
+# Force Unicode everywhere
+target_compile_definitions(${PROJECT_NAME} PRIVATE UNICODE _UNICODE)
 
 target_include_directories(${PROJECT_NAME}
         PUBLIC
