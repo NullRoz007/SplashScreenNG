@@ -38,6 +38,7 @@ set(OUTPUT_FOLDER "C:/semods/SplashScreenNG")
 
 # Setup your SKSE plugin as an SKSE plugin!
 find_package(CommonLibSSE CONFIG REQUIRED)
+find_package(directxtex CONFIG REQUIRED)
 
 add_subdirectory(include/libswf)
 
@@ -54,6 +55,7 @@ target_include_directories(${PROJECT_NAME}
 
 
 target_link_libraries(${PROJECT_NAME} PRIVATE swf)
+target_link_libraries(${PROJECT_NAME} PRIVATE Microsoft::DirectXTex)
 
 # When your SKSE .dll is compiled, this will automatically copy the .dll into your mods folder.
 # Only works if you configure DEPLOY_ROOT above (or set the SKYRIM_MODS_FOLDER environment variable)

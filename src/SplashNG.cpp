@@ -8,575 +8,515 @@
 using namespace SKSE;
 
 namespace SplashNG {
-    Splash* Splash::gSplash = nullptr;
-    void Splash::ShowSplash() {
-        if(!gSplash) gSplash = new Splash();
-        gSplash->ShowSplashImpl();
-    }
-
-    void Splash::CloseSplash() {
-        if (gSplash) gSplash->CloseSplashImpl();
-    }
-
-    LRESULT CALLBACK Splash::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-        Splash* self = gSplash;
-        switch (uMsg) {
-            case WM_SPLASH_CLOSE:
-                if (self->hSplash) {
-                    if (self->fadeOut) {
-                        self->useText = false;
-                        self->_isClosing = true;
-                    } else {
-                        self->sSKSELogFile.close();
-                        DestroyWindow(self->hSplash);
-                    }
-                }
-
-                return 0;
-            case WM_SETCURSOR:
-                SetCursor(LoadCursor(nullptr, IDC_ARROW));
-                return TRUE;
-            case WM_NCHITTEST:
-                return self->draggable ? HTCAPTION : HTCLIENT;
-            case WM_MOUSEACTIVATE:
-                return MA_NOACTIVATE;
-            case WM_DESTROY:
-                self->sRunning = false;
-                self->CleanUpD2D(); // paranoia
-                PostQuitMessage(0);
-                return 0;
-        }
-
-        return DefWindowProc(hwnd, uMsg, wParam, lParam);
-    }
-
-    void Splash::CleanUpD2D() {
-        pBackgroundBitmap.Reset();
-        pIDWriteTextFormat.Reset();
-        pIDWriteFactory.Reset();
-        pBrush.Reset();
-        pRenderTarget.Reset();
-        pD2DFactory.Reset();
-
-        if (pSpinnerFrames) {
-            for (int i = 0; i < pSpinnerFrames->size(); i++) {
-                pSpinnerFrames->at(i).Reset();
-            }
-        }
-    }
-
-    HRESULT Splash::InitializeD2D() {
-        if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) {
-            log::error("Failed to CoInitialize");
-            return E_ABORT;
-        }
-
-        HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, pD2DFactory.GetAddressOf());
-
-        if (SUCCEEDED(hr)) {
-            D2D1_RENDER_TARGET_PROPERTIES props = D2D1::RenderTargetProperties(
-                D2D1_RENDER_TARGET_TYPE_DEFAULT, 
-                D2D1::PixelFormat(
-                    DXGI_FORMAT_B8G8R8A8_UNORM, 
-                    D2D1_ALPHA_MODE_PREMULTIPLIED
-                )
-            );
-
-            hr = pD2DFactory->CreateDCRenderTarget(&props, pRenderTarget.GetAddressOf());
-        }
-
-        if (SUCCEEDED(hr)) {
-            hr = pRenderTarget->CreateSolidColorBrush(
-                D2D1::ColorF(RGB(
-                   textColorB,
-                   textColorG, 
-                   textColorR)
-                ), 
-                pBrush.GetAddressOf()
-            );
-        }
-
-        if (SUCCEEDED(hr)) {
-            hr = DWriteCreateFactory(
-                DWRITE_FACTORY_TYPE_SHARED, 
-                __uuidof(pIDWriteFactory),
-                reinterpret_cast<IUnknown**>(pIDWriteFactory.GetAddressOf())
-            );
-        }
-
-        if (SUCCEEDED(hr)) {
-            hr = pIDWriteFactory->CreateTextFormat(
-                font.c_str(), 
-                nullptr, 
-                textWeight,
-                textStyle, 
-                DWRITE_FONT_STRETCH_NORMAL, 
-                textSize,
-                L"", 
-                pIDWriteTextFormat.GetAddressOf()
-            );
-        }
-
-        if (SUCCEEDED(hr)) {
-            pIDWriteTextFormat->SetTextAlignment(textAlign); 
-            pIDWriteTextFormat->SetParagraphAlignment(paraAlign);
-            pIDWriteTextFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
-        }
-
-        if (SUCCEEDED(hr)) {
-            hr = CoCreateInstance(
-                CLSID_WICImagingFactory, 
-                nullptr, 
-                CLSCTX_INPROC_SERVER,
-                IID_PPV_ARGS(SplashBitmap::pIWICFactory.GetAddressOf())
-            );
-        }
-
-        if (SUCCEEDED(hr)) {
-            hr = SplashBitmap::LoadBitmapFromFile(
-                pRenderTarget.Get(),
-                splashFile.c_str(), 
-                width,
-                height,
-                pBackgroundBitmap.GetAddressOf(),
-                &backgroundPixels
-            ); 
-        }
-
-        if (useSpinner) {
-            hr = SplashBitmap::GetFramesFromFile(pRenderTarget.Get(), spinnerFile.c_str(), spinnerWidth, spinnerHeight, pSpinnerFrames);
-            if (SUCCEEDED(hr)) {
-                log::info("spinner frames: {}", pSpinnerFrames->size());
-            }
-        }
-
-        if(useCursor) {
-            wchar_t dllPath[MAX_PATH];
-            GetModuleFileName(hModule, dllPath, MAX_PATH);
-
-            filesystem::path cursorPath = filesystem::path(dllPath).parent_path() / L"Data\\interface\\cursormenu.swf";;
-            if(filesystem::exists(cursorPath)) {
-                log::info("Loading cursor: path={}", cursorPath.string());
-                Splash::cursor = new SplashCursor(cursorPath.string(), pRenderTarget);
-                cursor->CreateCursorBitmap(pD2DFactory, pRenderTarget, cursorScale);
-            } else {
-                log::info("Failed to find cursor: path={}", cursorPath.string());
-                useCursor = false;
-            }
-        }
-
-        if (FAILED(hr)) {
-            log::error(
-                "InitializeD2D failed (HRESULT {:#010x}) loading {}", 
-                static_cast<unsigned>(hr), 
-                std::string(splashFile.begin(), splashFile.end())
-            );
-        }
-
-        return hr;
-    }
-
-    void Splash::RenderFrame() {
-        HDC hdcScreen = GetDC(nullptr);
-        HDC hdcMem = CreateCompatibleDC(hdcScreen);
-
-        BITMAPINFO bmi = {};
-        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        bmi.bmiHeader.biWidth = width;
-        bmi.bmiHeader.biHeight = -height;
-        bmi.bmiHeader.biPlanes = 1;
-        bmi.bmiHeader.biBitCount = 32;
-        bmi.bmiHeader.biCompression = BI_RGB;
-
-        void* pvBits = nullptr;
-        HBITMAP hBitmap = CreateDIBSection(
-            hdcScreen, 
-            &bmi, 
-            DIB_RGB_COLORS, 
-            &pvBits, 
-            nullptr, 
-            0
-        );
-    
-        HBITMAP hOldBitmap = static_cast<HBITMAP>(SelectObject(hdcMem, hBitmap));
-
-        RECT rc = {
-            0, 
-            0, 
-            width, 
-            height
-        };
-        
-        pRenderTarget->BindDC(hdcMem, &rc);
-
-        std::wstring wline(SKSELastLogLine.begin(), SKSELastLogLine.end());
-        
-        D2D1_SIZE_F sz = pRenderTarget->GetSize();
-        D2D1_RECT_F bgRect = D2D1::RectF(
-            0, 
-            0, 
-            sz.width, 
-            sz.height
-        );
-
-        D2D1_RECT_F spRect = D2D1::RectF(
-            spinnerX, 
-            spinnerY, 
-            spinnerWidth + spinnerX, 
-            spinnerHeight + spinnerY
-        );
-        
-        D2D1_RECT_F textRect = D2D1::RectF(
-            textX + textPadding, 
-            textY + textPadding, 
-            textX + bgRect.right, 
-            textY + bgRect.bottom
-        );
-
-        IDWriteTextLayout* textLayout;
-        HRESULT hr = pIDWriteFactory->CreateTextLayout(
-            wline.c_str(), 
-            wline.length(), 
-            pIDWriteTextFormat.Get(),
-            textRect.right - textRect.left, 
-            textRect.bottom - textRect.right, 
-            &textLayout
-        );
-
-        if (SUCCEEDED(hr)) {
-            DWRITE_TEXT_METRICS metrics = {};
-            textLayout->GetMetrics(&metrics);
-            textRect.right = textRect.left + metrics.widthIncludingTrailingWhitespace;
-            
-            if (textRect.right > bgRect.right) textRect.right = bgRect.right;
-            if (checkOverlap(spRect, textRect)) {
-                if (textX < spinnerX) textRect.right = spRect.left;
-                if (textX > spinnerX) textRect.left = spRect.right;
-            }
-
-            if (fullscreen) {
-                textRect.top -= metrics.height;    
-            }
-
-            textLayout->Release();
-        }
-
-        pRenderTarget->BeginDraw();
-        pRenderTarget->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
-
-        if (pBackgroundBitmap) {
-            pRenderTarget->DrawBitmap(
-                pBackgroundBitmap.Get(), 
-                bgRect, 
-                currentOpacity, 
-                D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
-            );
-        }
-
-        if (useSpinner && pSpinnerFrames) {
-            pRenderTarget->DrawBitmap(pSpinnerFrames->at(framesElapsed % pSpinnerFrames->size()).Get(), 
-                spRect, 
-                currentOpacity,
-                D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
-            );
-        }
-
-        if (useText) {
-            pRenderTarget->PushAxisAlignedClip(textRect, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-            pRenderTarget->DrawText(wline.c_str(),
-                wline.length(), 
-                pIDWriteTextFormat.Get(), 
-                textRect,
-                pBrush.Get()
-            );
-            pRenderTarget->PopAxisAlignedClip();
-        }
-        
-        POINT pt;
-        GetCursorPos(&pt);
-        ScreenToClient(hSplash, &pt);
-
-        bool transparent = true;
-        if (!backgroundPixels.empty() && pt.x >= 0 && pt.y >= 0 && pt.x < width && pt.y < height) {
-            uint8_t alpha = backgroundPixels[(pt.y * width + pt.x) * 4 + 3];
-            transparent = alpha == 0;
-        }
-
-        if (!transparent && cursor) {
-            cursor->RenderCursor(pD2DFactory, pRenderTarget, (float)pt.x, (float)pt.y);
-            ShowCursor(FALSE);
-        }
-
-        hr = pRenderTarget->EndDraw();
-
-        if (FAILED(hr)) {
-            pRenderTarget.Reset();
-        }
-
-        POINT ptSrc = {0, 0};
-        SIZE szWin = {width, height};
-        POINT ptDest = {};
-        RECT wndRc = {};
-        GetWindowRect(hSplash, &wndRc);
-
-        ptDest.x = wndRc.left;
-        ptDest.y = wndRc.top;
-
-        BLENDFUNCTION blend = {};
-        blend.BlendOp = AC_SRC_OVER;
-        blend.BlendFlags = 0;
-        blend.SourceConstantAlpha = 255;
-        blend.AlphaFormat = AC_SRC_ALPHA;
-
-        UpdateLayeredWindow(
-            hSplash, 
-            hdcScreen, 
-            &ptDest, 
-            &szWin, 
-            hdcMem, 
-            &ptSrc, 
-            0, 
-            &blend, 
-            ULW_ALPHA
-        );
-
-        SelectObject(hdcMem, hOldBitmap);
-        DeleteObject(hBitmap);
-        DeleteDC(hdcMem);
-        ReleaseDC(nullptr, hdcScreen);
-    }
-
-    void Splash::SetupConfig() {
-        if(!Config::IsInitialized()) Config::Initialize();
-
-        width = Config::get<int>("width", FALLBACK_WIDTH);
-        height = Config::get<int>("height", FALLBACK_HEIGHT);
-        fullscreen = Config::get<bool>("fullscreen", false);
-
-        font = Config::get<wstring>("textFont", FALLBACK_FONT);
-        textSize = Config::get<int>("textFontSize", FALLBACK_FONT_SIZE);
-        textColorR = Config::get<int>("textColorR", 255);
-        textColorG = Config::get<int>("textColorG", 255);
-        textColorB = Config::get<int>("textColorB", 255);
-        textPadding = Config::get<float>("textPadding", FALLBACK_FONT_PADDING);
-
-        fadeIn = Config::get<bool>("fadeIn", false);
-        fadeOut = Config::get<bool>("fadeOut", false);
-        fadeStep = Config::get<float>("fadeStep", 0.1);
-        spinnerWidth = Config::get<int>("spinnerWidth", FALLBACK_SPINNER_WIDTH);
-        spinnerHeight = Config::get<int>("spinnerHeight", FALLBACK_SPINNER_HEIGHT);
-        spinnerX = Config::get<int>("spinnerX", 0);
-        spinnerY = Config::get<int>("spinnerY", 0);
-        targetOpacity = Config::get<float>("opacity", 1.0f);
-
-        useSpinner = Config::get<bool>("useSpinner", false);
-        useText = Config::get<bool>("useText", false);
-        draggable = Config::get<bool>("draggable", true);
-
-        textX = Config::get<int>("textX", 0);
-        textY = Config::get<int>("textY", 0);
-
-        textWeight = getTextWeight();
-        textStyle = getTextStyle();
-
-        windowStyleName = Config::get<string>("windowStyle", "forced");
-
-        SplashTextAlignment splashTextAlign = getTextAlignment();
-        textAlign = splashTextAlign.textAlignment;
-        paraAlign = splashTextAlign.paraAlignment;
-
-        wstring splash = Config::get<wstring>("splash", FALLBACK_SPLASH);
-        wstring spinner = Config::get<wstring>("spinner", FALLBACK_SPINNER);
-        bool randomSplash = Config::get<bool>("randomSplash", false);
-        wstring randomSplashFolder = Config::get<wstring>("randomSplashFolder", L"splashes/");
-
-        wchar_t dllPath[MAX_PATH];
-        GetModuleFileName(hModule, dllPath, MAX_PATH);
-
-        filesystem::path splashPath =
-            filesystem::path(dllPath).parent_path() / L"Data\\SKSE\\Plugins\\SplashScreenNG\\";
-        filesystem::path splashFolderPath =
-            filesystem::path(dllPath).parent_path() / L"Data\\SKSE\\Plugins\\SplashScreenNG\\";
-        
-        splashFolderPath /= randomSplashFolder; 
-
-        if(!randomSplash) {
-            splashPath /= splash;
-            splashFile = splashPath.wstring();
-        } else if(filesystem::exists(splashFolderPath)){
-            vector<filesystem::path> paths;
-
-            try {
-                for (const auto& entry : filesystem::directory_iterator(splashFolderPath.c_str())) {
-                    if (entry.path().extension() == ".png")
-                        paths.push_back(entry);
-                }
-            } catch (const filesystem::filesystem_error& e) {
-                log::error("Filesystem error: {}", e.what());
-                return;
-            }
-
-            srand(time(NULL));
-            int selection = rand() % paths.size();
-            splashFile = paths[selection].wstring();
-            log::info("RandomSplash: selected={}", string(splashFile.begin(), splashFile.end()));
-        } else {
-            log::info("RandomSplash: {} does not exist",splashFolderPath.string());
-        }
-
-        pSpinnerFrames = new vector<ComPtr<ID2D1Bitmap>>();
-
-        filesystem::path spinnerPath =
-            filesystem::path(dllPath).parent_path() / L"Data\\SKSE\\Plugins\\SplashScreenNG\\";
-        spinnerPath /= spinner;
-        spinnerFile = spinnerPath.wstring();
-
-        forceFocus = Config::get<bool>("forceFocus", false);
-
-        useCursor = Config::get<bool>("useCursor", false);
-        cursorScale = Config::get<float>("cursorScale", 1.0);
-
-        if(fullscreen) {
-            width = GetSystemMetrics(SM_CXSCREEN);
-            height = GetSystemMetrics(SM_CYSCREEN);
-            spinnerX = width - spinnerWidth;
-            spinnerY = height - spinnerHeight;
-            textX = 0 + textPadding;
-            textY = height - textPadding;
-            forceFocus = true;
-            draggable = false;
-        }
-    }
-
-    void Splash::CreateSplashWindow() {
-        uint32_t windowStyle = Config::getFrom<int>("windowStyles", windowStyleName, WS_EX_TOPMOST | WS_EX_NOACTIVATE);
-        windowStyle |= WS_EX_LAYERED;  // force layered
-
-        int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-        int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-
-        int splashPositionX = (screenWidth / 2) - (width / 2);
-        int splashPositionY = (screenHeight / 2) - (height / 2);
-
-        hModule = GetModuleHandle(nullptr);
-
-        WNDCLASS wc = {};
-        wc.lpfnWndProc = WindowProc;
-        wc.hInstance = hModule;
-        wc.lpszClassName = CLASS_NAME;
-
-        if (!RegisterClass(&wc)) log::info("Failed to register window class!");
-
-        log::info("Window Style: {} = {:#010x}", windowStyleName, windowStyle);
-        log::info("Splash Size: {} x {}", width, height);
-
-        log::info(
-            "Splash File: {}", 
-            std::string(splashFile.begin(), splashFile.end())
-        );
-        
-        log::info(
-            "Spinner File: {}", 
-            std::string(spinnerFile.begin(), spinnerFile.end())
-        );
-
-        hSplash = CreateWindowEx(windowStyle, CLASS_NAME, L"SplashScreenNG", WS_POPUP, splashPositionX, splashPositionY, width,
-                                 height, nullptr, nullptr, hModule, nullptr);
-
-        HRGN hitRegion = CreateRectRgn(0, 0, width, height);
-
-        SetWindowRgn(hSplash, hitRegion, FALSE);
-
-        if (FAILED(InitializeD2D())) {
-            log::error("InitializeD2D failed");
-            return;
-        }
-        log::info("Initialized Direct2D");
-
-        if (SUCCEEDED(InitializeSKSELog())) {
-            log::info("Initialized SKSE64 Log");
-            log::info("Path: {}", Splash::SKSELogPath);
-        }
-
-        ShowWindow(hSplash, SW_SHOWNOACTIVATE);
-
-        LPSTR szFileName = (LPSTR)malloc(MAX_PATH);
-        GetModuleFileNameA(NULL, szFileName, MAX_PATH);
-        HICON hIconBig = NULL;
-        if (szFileName) {
-            ExtractIconExA(szFileName, 0, &hIconBig, NULL, 1);
-            SendMessage(hSplash, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
-            SendMessage(hSplash, WM_SETICON, ICON_SMALL, (LPARAM)hIconBig);
-            SetClassLongPtr(hSplash, GCLP_HICON, (LONG_PTR)hIconBig);
-            SetClassLongPtr(hSplash, GCLP_HICONSM, (LONG_PTR)hIconBig);
-        }
-
-        free(szFileName);
-        sRunning = true;
-    }
-
-    void Splash::ThreadEntry() {
-        sThreadId = std::format("{}", std::this_thread::get_id());
-        log::info("Thread ID: {}", sThreadId);
-
-        SetupConfig();
-        CreateSplashWindow();
-     
-        MSG msg = {};
-        if (!fadeIn) currentOpacity = targetOpacity;
-        while (sRunning) {
-            UpdateSKSELogLine();
-
-            while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
-                TranslateMessage(&msg);
-                DispatchMessage(&msg);
-            }
-            
-            if (currentOpacity < targetOpacity && !_isClosing) currentOpacity += fadeStep;
-            if (currentOpacity > 0.0 && _isClosing) {
-                currentOpacity -= fadeStep;
-                if (currentOpacity <= 0.0f) {
-                    fadeOut = false;
-                    CloseSplash();
-                }
-            }
-
-            if (pRenderTarget) RenderFrame();
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            framesElapsed += 1;
-        }
-    }
-
-    void Splash::ShowSplashImpl() {
-        if (sRunning) return;
-        log::info("Creating Splash Thread");
-        sThread = std::thread(&Splash::ThreadEntry, this);
-        sThread.detach();
-    }
-
-    void Splash::CloseSplashImpl() { PostMessage(hSplash, WM_SPLASH_CLOSE, 0, 0); }
-
-    HRESULT Splash::InitializeSKSELog() {
-        auto pathOpt = log::log_directory();
-        if (!pathOpt) return E_FAIL;
-
-        filesystem::path path = *pathOpt / "skse64.log";
-        wstring pathStr = path.wstring();
-
-        DWORD attrib = GetFileAttributes(pathStr.c_str());
-        if (attrib == INVALID_FILE_ATTRIBUTES || (attrib & FILE_ATTRIBUTE_DIRECTORY)) return E_FAIL;
-
-        SKSELogPath = path.string();
-        sSKSELogFile.open(SKSELogPath);
-        return S_OK;
-    }
-
-    void Splash::UpdateSKSELogLine() {
-        if (!sSKSELogFile.is_open()) return;
-        string line;
-        if (std::getline(sSKSELogFile, line)) {
-            if (line != SKSELastLogLine) SKSELastLogLine = line;
-        }
-        sSKSELogFile.clear();
-    }
+Splash* Splash::gSplash = nullptr;
+void Splash::ShowSplash() {
+  if (!gSplash) gSplash = new Splash();
+  gSplash->ShowSplashImpl();
 }
+
+void Splash::CloseSplash() {
+  if (gSplash) gSplash->CloseSplashImpl();
+}
+
+LRESULT CALLBACK Splash::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
+                                    LPARAM lParam) {
+  Splash* self = gSplash;
+  switch (uMsg) {
+    case WM_SPLASH_CLOSE:
+      if (self->hSplash) {
+        if (self->fadeOut) {
+          self->useText = false;
+          self->_isClosing = true;
+        } else {
+          self->sSKSELogFile.close();
+          DestroyWindow(self->hSplash);
+        }
+      }
+
+      return 0;
+    case WM_SETCURSOR:
+      SetCursor(LoadCursor(nullptr, IDC_ARROW));
+      return TRUE;
+    case WM_NCHITTEST:
+      return self->draggable ? HTCAPTION : HTCLIENT;
+    case WM_MOUSEACTIVATE:
+      return MA_NOACTIVATE;
+    case WM_DESTROY:
+      self->sRunning = false;
+      self->CleanUpD2D();  // paranoia
+      PostQuitMessage(0);
+      return 0;
+  }
+
+  return DefWindowProc(hwnd, uMsg, wParam, lParam);
+}
+
+void Splash::CleanUpD2D() {
+  pBackgroundBitmap.Reset();
+  pIDWriteTextFormat.Reset();
+  pIDWriteFactory.Reset();
+  pBrush.Reset();
+  pRenderTarget.Reset();
+  pD2DFactory.Reset();
+
+  if (pSpinnerFrames) {
+    for (int i = 0; i < pSpinnerFrames->size(); i++) {
+      pSpinnerFrames->at(i).Reset();
+    }
+  }
+}
+
+HRESULT Splash::InitializeD2D() {
+  if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) {
+    log::error("Failed to CoInitialize");
+    return E_ABORT;
+  }
+
+  HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                                 pD2DFactory.GetAddressOf());
+
+  if (SUCCEEDED(hr)) {
+    D2D1_RENDER_TARGET_PROPERTIES props = D2D1::RenderTargetProperties(
+        D2D1_RENDER_TARGET_TYPE_DEFAULT,
+        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                          D2D1_ALPHA_MODE_PREMULTIPLIED));
+
+    hr =
+        pD2DFactory->CreateDCRenderTarget(&props, pRenderTarget.GetAddressOf());
+  }
+
+  if (SUCCEEDED(hr)) {
+    hr = pRenderTarget->CreateSolidColorBrush(
+        D2D1::ColorF(RGB(textColorB, textColorG, textColorR)),
+        pBrush.GetAddressOf());
+  }
+
+  if (SUCCEEDED(hr)) {
+    hr = DWriteCreateFactory(
+        DWRITE_FACTORY_TYPE_SHARED, __uuidof(pIDWriteFactory),
+        reinterpret_cast<IUnknown**>(pIDWriteFactory.GetAddressOf()));
+  }
+
+  if (SUCCEEDED(hr)) {
+    hr = pIDWriteFactory->CreateTextFormat(
+        font.c_str(), nullptr, textWeight, textStyle,
+        DWRITE_FONT_STRETCH_NORMAL, textSize, L"",
+        pIDWriteTextFormat.GetAddressOf());
+  }
+
+  if (SUCCEEDED(hr)) {
+    pIDWriteTextFormat->SetTextAlignment(textAlign);
+    pIDWriteTextFormat->SetParagraphAlignment(paraAlign);
+    pIDWriteTextFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+  }
+
+  if (SUCCEEDED(hr)) {
+    hr = CoCreateInstance(
+        CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(SplashBitmap::pIWICFactory.GetAddressOf()));
+  }
+
+  if (SUCCEEDED(hr)) {
+    hr = SplashBitmap::LoadBitmapFromFile(
+        pRenderTarget.Get(), splashFile.c_str(), width, height,
+        pBackgroundBitmap.GetAddressOf(), &backgroundPixels);
+  }
+
+  if (useSpinner) {
+    hr = SplashBitmap::GetFramesFromFile(pRenderTarget.Get(),
+                                         spinnerFile.c_str(), spinnerWidth,
+                                         spinnerHeight, pSpinnerFrames);
+    if (SUCCEEDED(hr)) {
+      log::info("spinner frames: {}", pSpinnerFrames->size());
+    }
+  }
+
+  if (useCursor) {
+    wchar_t dllPath[MAX_PATH];
+    GetModuleFileName(hModule, dllPath, MAX_PATH);
+
+    filesystem::path cursorPath = filesystem::path(dllPath).parent_path() /
+                                  L"Data\\interface\\cursormenu.swf";
+    ;
+    if (filesystem::exists(cursorPath)) {
+      log::info("Loading cursor: path={}", cursorPath.string());
+      Splash::cursor = new SplashCursor(cursorPath.string(), pRenderTarget);
+      cursor->CreateCursorBitmap(pD2DFactory, pRenderTarget, cursorScale);
+    } else {
+      log::info("Failed to find cursor: path={}", cursorPath.string());
+      useCursor = false;
+    }
+  }
+
+  if (FAILED(hr)) {
+    log::error("InitializeD2D failed (HRESULT {:#010x}) loading {}",
+               static_cast<unsigned>(hr),
+               std::string(splashFile.begin(), splashFile.end()));
+  }
+
+  return hr;
+}
+
+void Splash::RenderFrame() {
+  HDC hdcScreen = GetDC(nullptr);
+  HDC hdcMem = CreateCompatibleDC(hdcScreen);
+
+  BITMAPINFO bmi = {};
+  bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+  bmi.bmiHeader.biWidth = width;
+  bmi.bmiHeader.biHeight = -height;
+  bmi.bmiHeader.biPlanes = 1;
+  bmi.bmiHeader.biBitCount = 32;
+  bmi.bmiHeader.biCompression = BI_RGB;
+
+  void* pvBits = nullptr;
+  HBITMAP hBitmap =
+      CreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, &pvBits, nullptr, 0);
+
+  HBITMAP hOldBitmap = static_cast<HBITMAP>(SelectObject(hdcMem, hBitmap));
+
+  RECT rc = {0, 0, width, height};
+
+  pRenderTarget->BindDC(hdcMem, &rc);
+
+  std::wstring wline(SKSELastLogLine.begin(), SKSELastLogLine.end());
+
+  D2D1_SIZE_F sz = pRenderTarget->GetSize();
+  D2D1_RECT_F bgRect = D2D1::RectF(0, 0, sz.width, sz.height);
+
+  D2D1_RECT_F spRect = D2D1::RectF(spinnerX, spinnerY, spinnerWidth + spinnerX,
+                                   spinnerHeight + spinnerY);
+
+  D2D1_RECT_F textRect =
+      D2D1::RectF(textX + textPadding, textY + textPadding,
+                  textX + bgRect.right, textY + bgRect.bottom);
+
+  IDWriteTextLayout* textLayout;
+  HRESULT hr = pIDWriteFactory->CreateTextLayout(
+      wline.c_str(), wline.length(), pIDWriteTextFormat.Get(),
+      textRect.right - textRect.left, textRect.bottom - textRect.right,
+      &textLayout);
+
+  if (SUCCEEDED(hr)) {
+    DWRITE_TEXT_METRICS metrics = {};
+    textLayout->GetMetrics(&metrics);
+    textRect.right = textRect.left + metrics.widthIncludingTrailingWhitespace;
+
+    if (textRect.right > bgRect.right) textRect.right = bgRect.right;
+    if (checkOverlap(spRect, textRect)) {
+      if (textX < spinnerX) textRect.right = spRect.left;
+      if (textX > spinnerX) textRect.left = spRect.right;
+    }
+
+    if (fullscreen) {
+      textRect.top -= metrics.height;
+    }
+
+    textLayout->Release();
+  }
+
+  pRenderTarget->BeginDraw();
+  pRenderTarget->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
+
+  if (pBackgroundBitmap) {
+    pRenderTarget->DrawBitmap(pBackgroundBitmap.Get(), bgRect, currentOpacity,
+                              D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
+  }
+
+  if (useSpinner && pSpinnerFrames) {
+    pRenderTarget->DrawBitmap(
+        pSpinnerFrames->at(framesElapsed % pSpinnerFrames->size()).Get(),
+        spRect, currentOpacity,
+        D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
+  }
+
+  if (useText) {
+    pRenderTarget->PushAxisAlignedClip(textRect,
+                                       D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    pRenderTarget->DrawText(wline.c_str(), wline.length(),
+                            pIDWriteTextFormat.Get(), textRect, pBrush.Get());
+    pRenderTarget->PopAxisAlignedClip();
+  }
+
+  POINT pt;
+  GetCursorPos(&pt);
+  ScreenToClient(hSplash, &pt);
+
+  bool transparent = true;
+  if (!backgroundPixels.empty() && pt.x >= 0 && pt.y >= 0 && pt.x < width &&
+      pt.y < height) {
+    uint8_t alpha = backgroundPixels[(pt.y * width + pt.x) * 4 + 3];
+    transparent = alpha == 0;
+  }
+
+  if (!transparent && cursor) {
+    cursor->RenderCursor(pD2DFactory, pRenderTarget, (float)pt.x, (float)pt.y);
+    ShowCursor(FALSE);
+  }
+
+  hr = pRenderTarget->EndDraw();
+
+  if (FAILED(hr)) {
+    pRenderTarget.Reset();
+  }
+
+  POINT ptSrc = {0, 0};
+  SIZE szWin = {width, height};
+  POINT ptDest = {};
+  RECT wndRc = {};
+  GetWindowRect(hSplash, &wndRc);
+
+  ptDest.x = wndRc.left;
+  ptDest.y = wndRc.top;
+
+  BLENDFUNCTION blend = {};
+  blend.BlendOp = AC_SRC_OVER;
+  blend.BlendFlags = 0;
+  blend.SourceConstantAlpha = 255;
+  blend.AlphaFormat = AC_SRC_ALPHA;
+
+  UpdateLayeredWindow(hSplash, hdcScreen, &ptDest, &szWin, hdcMem, &ptSrc, 0,
+                      &blend, ULW_ALPHA);
+
+  SelectObject(hdcMem, hOldBitmap);
+  DeleteObject(hBitmap);
+  DeleteDC(hdcMem);
+  ReleaseDC(nullptr, hdcScreen);
+}
+
+void Splash::SetupConfig() {
+  if (!Config::IsInitialized()) Config::Initialize();
+
+  width = Config::get<int>("width", FALLBACK_WIDTH);
+  height = Config::get<int>("height", FALLBACK_HEIGHT);
+  fullscreen = Config::get<bool>("fullscreen", false);
+
+  font = Config::get<wstring>("textFont", FALLBACK_FONT);
+  textSize = Config::get<int>("textFontSize", FALLBACK_FONT_SIZE);
+  textColorR = Config::get<int>("textColorR", 255);
+  textColorG = Config::get<int>("textColorG", 255);
+  textColorB = Config::get<int>("textColorB", 255);
+  textPadding = Config::get<float>("textPadding", FALLBACK_FONT_PADDING);
+
+  fadeIn = Config::get<bool>("fadeIn", false);
+  fadeOut = Config::get<bool>("fadeOut", false);
+  fadeStep = Config::get<float>("fadeStep", 0.1);
+  spinnerWidth = Config::get<int>("spinnerWidth", FALLBACK_SPINNER_WIDTH);
+  spinnerHeight = Config::get<int>("spinnerHeight", FALLBACK_SPINNER_HEIGHT);
+  spinnerX = Config::get<int>("spinnerX", 0);
+  spinnerY = Config::get<int>("spinnerY", 0);
+  targetOpacity = Config::get<float>("opacity", 1.0f);
+
+  useSpinner = Config::get<bool>("useSpinner", false);
+  useText = Config::get<bool>("useText", false);
+  draggable = Config::get<bool>("draggable", true);
+
+  textX = Config::get<int>("textX", 0);
+  textY = Config::get<int>("textY", 0);
+
+  textWeight = getTextWeight();
+  textStyle = getTextStyle();
+
+  windowStyleName = Config::get<string>("windowStyle", "forced");
+
+  SplashTextAlignment splashTextAlign = getTextAlignment();
+  textAlign = splashTextAlign.textAlignment;
+  paraAlign = splashTextAlign.paraAlignment;
+
+  wstring splash = Config::get<wstring>("splash", FALLBACK_SPLASH);
+  wstring spinner = Config::get<wstring>("spinner", FALLBACK_SPINNER);
+  bool randomSplash = Config::get<bool>("randomSplash", false);
+  wstring randomSplashFolder =
+      Config::get<wstring>("randomSplashFolder", L"splashes/");
+
+  wchar_t dllPath[MAX_PATH];
+  GetModuleFileName(hModule, dllPath, MAX_PATH);
+
+  filesystem::path splashPath = filesystem::path(dllPath).parent_path() /
+                                L"Data\\SKSE\\Plugins\\SplashScreenNG\\";
+  filesystem::path splashFolderPath = filesystem::path(dllPath).parent_path() /
+                                      L"Data\\SKSE\\Plugins\\SplashScreenNG\\";
+
+  splashFolderPath /= randomSplashFolder;
+
+  if (!randomSplash) {
+    splashPath /= splash;
+    splashFile = splashPath.wstring();
+  } else if (filesystem::exists(splashFolderPath)) {
+    vector<filesystem::path> paths;
+
+    try {
+      for (const auto& entry :
+           filesystem::directory_iterator(splashFolderPath.c_str())) {
+        if (entry.path().extension() == ".png") paths.push_back(entry);
+      }
+    } catch (const filesystem::filesystem_error& e) {
+      log::error("Filesystem error: {}", e.what());
+      return;
+    }
+
+    srand(time(NULL));
+    int selection = rand() % paths.size();
+    splashFile = paths[selection].wstring();
+    log::info("RandomSplash: selected={}",
+              string(splashFile.begin(), splashFile.end()));
+  } else {
+    log::info("RandomSplash: {} does not exist", splashFolderPath.string());
+  }
+
+  pSpinnerFrames = new vector<ComPtr<ID2D1Bitmap>>();
+
+  filesystem::path spinnerPath = filesystem::path(dllPath).parent_path() /
+                                 L"Data\\SKSE\\Plugins\\SplashScreenNG\\";
+  spinnerPath /= spinner;
+  spinnerFile = spinnerPath.wstring();
+
+  forceFocus = Config::get<bool>("forceFocus", false);
+
+  useCursor = Config::get<bool>("useCursor", false);
+  cursorScale = Config::get<float>("cursorScale", 1.0);
+
+  if (fullscreen) {
+    width = GetSystemMetrics(SM_CXSCREEN);
+    height = GetSystemMetrics(SM_CYSCREEN);
+    spinnerX = width - spinnerWidth;
+    spinnerY = height - spinnerHeight;
+    textX = 0 + textPadding;
+    textY = height - textPadding;
+    forceFocus = true;
+    draggable = false;
+  }
+}
+
+void Splash::CreateSplashWindow() {
+  uint32_t windowStyle = Config::getFrom<int>("windowStyles", windowStyleName,
+                                              WS_EX_TOPMOST | WS_EX_NOACTIVATE);
+  windowStyle |= WS_EX_LAYERED;  // force layered
+
+  int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+  int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+
+  int splashPositionX = (screenWidth / 2) - (width / 2);
+  int splashPositionY = (screenHeight / 2) - (height / 2);
+
+  hModule = GetModuleHandle(nullptr);
+
+  WNDCLASS wc = {};
+  wc.lpfnWndProc = WindowProc;
+  wc.hInstance = hModule;
+  wc.lpszClassName = CLASS_NAME;
+
+  if (!RegisterClass(&wc)) log::info("Failed to register window class!");
+
+  log::info("Window Style: {} = {:#010x}", windowStyleName, windowStyle);
+  log::info("Splash Size: {} x {}", width, height);
+
+  log::info("Splash File: {}",
+            std::string(splashFile.begin(), splashFile.end()));
+
+  log::info("Spinner File: {}",
+            std::string(spinnerFile.begin(), spinnerFile.end()));
+
+  hSplash = CreateWindowEx(windowStyle, CLASS_NAME, L"SplashScreenNG", WS_POPUP,
+                           splashPositionX, splashPositionY, width, height,
+                           nullptr, nullptr, hModule, nullptr);
+
+  HRGN hitRegion = CreateRectRgn(0, 0, width, height);
+
+  SetWindowRgn(hSplash, hitRegion, FALSE);
+
+  if (FAILED(InitializeD2D())) {
+    log::error("InitializeD2D failed");
+    return;
+  }
+  log::info("Initialized Direct2D");
+
+  if (SUCCEEDED(InitializeSKSELog())) {
+    log::info("Initialized SKSE64 Log");
+    log::info("Path: {}", Splash::SKSELogPath);
+  }
+
+  ShowWindow(hSplash, SW_SHOWNOACTIVATE);
+
+  LPSTR szFileName = (LPSTR)malloc(MAX_PATH);
+  GetModuleFileNameA(NULL, szFileName, MAX_PATH);
+  HICON hIconBig = NULL;
+  if (szFileName) {
+    ExtractIconExA(szFileName, 0, &hIconBig, NULL, 1);
+    SendMessage(hSplash, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
+    SendMessage(hSplash, WM_SETICON, ICON_SMALL, (LPARAM)hIconBig);
+    SetClassLongPtr(hSplash, GCLP_HICON, (LONG_PTR)hIconBig);
+    SetClassLongPtr(hSplash, GCLP_HICONSM, (LONG_PTR)hIconBig);
+  }
+
+  free(szFileName);
+  sRunning = true;
+}
+
+void Splash::ThreadEntry() {
+  sThreadId = std::format("{}", std::this_thread::get_id());
+  log::info("Thread ID: {}", sThreadId);
+
+  SetupConfig();
+  CreateSplashWindow();
+
+  MSG msg = {};
+  if (!fadeIn) currentOpacity = targetOpacity;
+  while (sRunning) {
+    UpdateSKSELogLine();
+
+    while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+      TranslateMessage(&msg);
+      DispatchMessage(&msg);
+    }
+
+    if (currentOpacity < targetOpacity && !_isClosing)
+      currentOpacity += fadeStep;
+    if (currentOpacity > 0.0 && _isClosing) {
+      currentOpacity -= fadeStep;
+      if (currentOpacity <= 0.0f) {
+        fadeOut = false;
+        CloseSplash();
+      }
+    }
+
+    if (pRenderTarget) RenderFrame();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    framesElapsed += 1;
+  }
+}
+
+void Splash::ShowSplashImpl() {
+  if (sRunning) return;
+  log::info("Creating Splash Thread");
+  sThread = std::thread(&Splash::ThreadEntry, this);
+  sThread.detach();
+}
+
+void Splash::CloseSplashImpl() { PostMessage(hSplash, WM_SPLASH_CLOSE, 0, 0); }
+
+HRESULT Splash::InitializeSKSELog() {
+  auto pathOpt = log::log_directory();
+  if (!pathOpt) return E_FAIL;
+
+  filesystem::path path = *pathOpt / "skse64.log";
+  wstring pathStr = path.wstring();
+
+  DWORD attrib = GetFileAttributes(pathStr.c_str());
+  if (attrib == INVALID_FILE_ATTRIBUTES || (attrib & FILE_ATTRIBUTE_DIRECTORY))
+    return E_FAIL;
+
+  SKSELogPath = path.string();
+  sSKSELogFile.open(SKSELogPath);
+  return S_OK;
+}
+
+void Splash::UpdateSKSELogLine() {
+  if (!sSKSELogFile.is_open()) return;
+  string line;
+  if (std::getline(sSKSELogFile, line)) {
+    if (line != SKSELastLogLine) SKSELastLogLine = line;
+  }
+  sSKSELogFile.clear();
+}
+}  // namespace SplashNG

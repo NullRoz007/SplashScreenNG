@@ -1,6 +1,6 @@
 #ifndef UNICODE
 #define UNICODE
-#endif 
+#endif
 
 #include <windows.h>
 #include <spdlog/spdlog.h>
@@ -14,75 +14,83 @@ using namespace SKSE::stl;
 using namespace SplashNG;
 
 void OnMessage(MessagingInterface::Message* message) {
-    uint32_t kCloseEvent = Config::get<int>("closeOn", 6);
-    
-    if (message->type == MessagingInterface::kInputLoaded && Config::get<bool>("forceFocus", false)) {
-        HWND hwndSkyrim = FindWindow(nullptr, L"Skyrim Special Edition");
-        if (hwndSkyrim == 0) hwndSkyrim = FindWindow(nullptr, L"Skyrim Anniversary Edition");
-        if (hwndSkyrim != 0) {
-            log::info("Forcing focus to HWND {:#x}", reinterpret_cast<uintptr_t>(hwndSkyrim));
+  uint32_t kCloseEvent = Config::get<int>("closeOn", 6);
 
-            DWORD foregroundThread = GetWindowThreadProcessId(GetForegroundWindow(), nullptr);
-            DWORD skyrimThread = GetWindowThreadProcessId(hwndSkyrim, nullptr);
+  if (message->type == MessagingInterface::kInputLoaded &&
+      Config::get<bool>("forceFocus", false)) {
+    HWND hwndSkyrim = FindWindow(nullptr, L"Skyrim Special Edition");
+    if (hwndSkyrim == 0)
+      hwndSkyrim = FindWindow(nullptr, L"Skyrim Anniversary Edition");
+    if (hwndSkyrim != 0) {
+      log::info("Forcing focus to HWND {:#x}",
+                reinterpret_cast<uintptr_t>(hwndSkyrim));
 
-            AttachThreadInput(foregroundThread, skyrimThread, TRUE);
-            BringWindowToTop(hwndSkyrim);
-            SetForegroundWindow(hwndSkyrim);
-            SetFocus(hwndSkyrim);
-            SetActiveWindow(hwndSkyrim);
-            AttachThreadInput(foregroundThread, skyrimThread, FALSE);
+      DWORD foregroundThread =
+          GetWindowThreadProcessId(GetForegroundWindow(), nullptr);
+      DWORD skyrimThread = GetWindowThreadProcessId(hwndSkyrim, nullptr);
 
-            SetWindowPos(hwndSkyrim, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-            SetWindowPos(hwndSkyrim, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-        }
+      AttachThreadInput(foregroundThread, skyrimThread, TRUE);
+      BringWindowToTop(hwndSkyrim);
+      SetForegroundWindow(hwndSkyrim);
+      SetFocus(hwndSkyrim);
+      SetActiveWindow(hwndSkyrim);
+      AttachThreadInput(foregroundThread, skyrimThread, FALSE);
+
+      SetWindowPos(hwndSkyrim, HWND_TOPMOST, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE);
+      SetWindowPos(hwndSkyrim, HWND_NOTOPMOST, 0, 0, 0, 0,
+                   SWP_NOMOVE | SWP_NOSIZE);
     }
+  }
 
-    if (message->type == kCloseEvent) { // 6 = kInputLoaded, 8 = kDataLoaded
-        Splash::CloseSplash();
-    }
+  if (message->type == kCloseEvent) {  // 6 = kInputLoaded, 8 = kDataLoaded
+    Splash::CloseSplash();
+  }
 }
 
 void InitLogging() {
-    auto path = log::log_directory();
-    spdlog::level::level_enum level;
+  auto path = log::log_directory();
+  spdlog::level::level_enum level;
 
-    if (!path) report_and_fail("Unable to locate SKSE logs directory!");
+  if (!path) report_and_fail("Unable to locate SKSE logs directory!");
 
-    *path /= PluginDeclaration::GetSingleton()->GetName();
-    *path += L".log";
+  *path /= PluginDeclaration::GetSingleton()->GetName();
+  *path += L".log";
 
-    std::shared_ptr<spdlog::logger> log;
-    
-    if (IsDebuggerPresent()) {
-        log = std::make_shared<spdlog::logger>("Global", std::make_shared<spdlog::sinks::msvc_sink_mt>());
-        level = spdlog::level::trace;
-    } else {
-        log = std::make_shared<spdlog::logger>(
-            "Global", std::make_shared<spdlog::sinks::basic_file_sink_mt>(path->string(), true));
-        level = spdlog::level::info;
-    }
+  std::shared_ptr<spdlog::logger> log;
 
-    log->set_level(level);
-    log->flush_on(level);
+  if (IsDebuggerPresent()) {
+    log = std::make_shared<spdlog::logger>(
+        "Global", std::make_shared<spdlog::sinks::msvc_sink_mt>());
+    level = spdlog::level::trace;
+  } else {
+    log = std::make_shared<spdlog::logger>(
+        "Global", std::make_shared<spdlog::sinks::basic_file_sink_mt>(
+                      path->string(), true));
+    level = spdlog::level::info;
+  }
 
-    spdlog::set_default_logger(std::move(log));
-    spdlog::set_pattern("%s(%#): [%^%l%$] %v"s);
+  log->set_level(level);
+  log->flush_on(level);
+
+  spdlog::set_default_logger(std::move(log));
+  spdlog::set_pattern("%s(%#): [%^%l%$] %v"s);
 }
 
-SKSEPluginLoad(const SKSE::LoadInterface *skse) {
-    SKSE::Init(skse);
-    InitLogging();
-    std::string tId = std::format("{}", std::this_thread::get_id());
-    log::info("Main Thread: {}", tId);
-    
-    Config::Initialize();
-    Splash::ShowSplash();
+SKSEPluginLoad(const SKSE::LoadInterface* skse) {
+  SKSE::Init(skse);
+  InitLogging();
+  std::string tId = std::format("{}", std::this_thread::get_id());
+  log::info("Main Thread: {}", tId);
 
-    HINSTANCE hModule = GetModuleHandle(nullptr);
-    wchar_t dllPath[MAX_PATH];
-    GetModuleFileName(hModule, dllPath, MAX_PATH);
+  Config::Initialize();
+  Splash::ShowSplash();
 
-    SKSE::GetMessagingInterface()->RegisterListener(OnMessage);
+  HINSTANCE hModule = GetModuleHandle(nullptr);
+  wchar_t dllPath[MAX_PATH];
+  GetModuleFileName(hModule, dllPath, MAX_PATH);
 
-    return true;
+  SKSE::GetMessagingInterface()->RegisterListener(OnMessage);
+
+  return true;
 }
