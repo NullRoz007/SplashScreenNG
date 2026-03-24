@@ -6,6 +6,9 @@
 # If you use CMake features from higher versions, update this to match.
 cmake_minimum_required(VERSION 3.20)
 
+# Force Unicode everywhere
+target_compile_definitions(${PROJECT_NAME} PRIVATE UNICODE _UNICODE)
+
 # [BEGIN set_project_name]
 # Set your project name. This will be the name of your SKSE .dll file.
 project(_SplashScreenNG VERSION 0.0.2 LANGUAGES CXX)
