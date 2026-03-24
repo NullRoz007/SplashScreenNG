@@ -15,6 +15,7 @@ using namespace SplashNG;
 
 void OnMessage(MessagingInterface::Message* message) {
     uint32_t kCloseEvent = Config::get<int>("closeOn", 6);
+    
     if (message->type == MessagingInterface::kInputLoaded && Config::get<bool>("forceFocus", false)) {
         HWND hwndSkyrim = FindWindow(nullptr, L"Skyrim Special Edition");
         if (hwndSkyrim == 0) hwndSkyrim = FindWindow(nullptr, L"Skyrim Anniversary Edition");
