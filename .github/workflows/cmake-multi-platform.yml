@@ -12,7 +12,6 @@ jobs:
 
     env:
       BUILD_TYPE: Release
-      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
 
     steps:
       - name: Checkout repository
@@ -20,18 +19,8 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup vcpkg cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ github.workspace }}/.vcpkg-cache
-          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
-          restore-keys: |
-            vcpkg-${{ runner.os }}-
-
-      - name: Setup vcpkg
+       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: ''
 
       - name: Configure CMake
         run: |
@@ -50,3 +39,7 @@ jobs:
           name: ${{ github.event.repository.name }}-${{ github.sha }}
           path: ${{ github.workspace }}/*-release.zip
           if-no-files-found: error
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ github.workspace }}/*-release.zip
